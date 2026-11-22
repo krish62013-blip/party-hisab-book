@@ -148,6 +148,7 @@
   </style>
 </head>
 <body class="min-h-screen antialiased selection:bg-indigo-600 selection:text-white">
+  <iframe name="gs_hidden_iframe" id="gs_hidden_iframe" style="display:none;"></iframe>
 
   <!-- ==================== TOP NAVIGATION BAR ==================== -->
   <header class="sticky top-0 z-40 surface-card border-b shadow-sm backdrop-blur-md">
@@ -1252,16 +1253,28 @@ const FOLDER_NAME = 'Party_Hisab_Proofs';
 
 function doGet(e) {
   const action = (e && e.parameter && e.parameter.action) || 'PING';
-  if (action === 'LOAD_ALL') {
-    return jsonResponse(loadAllData());
+  const callback = (e && e.parameter && e.parameter.callback) || '';
+  let result = { ok: true, message: 'Party Hisab Book Backend Active' };
+  try {
+    if (action === 'LOAD_ALL' || action === 'pull') {
+      result = loadAllData();
+    }
+  } catch (err) {
+    result = { ok: false, error: err.toString() };
   }
-  return jsonResponse({ ok: true, message: 'Party Hisab Book Backend Active' });
+  return outputResponse(result, callback);
 }
 
 function doPost(e) {
   try {
-    const payload = JSON.parse(e.postData.contents);
-    if (payload.action === 'SYNC_ALL') {
+    let raw = '';
+    if (e && e.parameter && e.parameter.payload) {
+      raw = e.parameter.payload;
+    } else if (e && e.postData && e.postData.contents) {
+      raw = e.postData.contents;
+    }
+    const payload = JSON.parse(raw);
+    if (payload.action === 'SYNC_ALL' || payload.action === 'pushAll') {
       syncAllToSheets(payload.data);
       return jsonResponse({ ok: true, syncedAt: new Date().toISOString() });
     }
@@ -1275,9 +1288,18 @@ function doPost(e) {
   }
 }
 
-function jsonResponse(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj))
+function outputResponse(obj, callback) {
+  const json = JSON.stringify(obj);
+  if (callback) {
+    return ContentService.createTextOutput(callback + '(' + json + ');')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService.createTextOutput(json)
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function jsonResponse(obj) {
+  return outputResponse(obj, '');
 }
 
 function getOrCreateSheet(ss, name, headers) {
@@ -1304,7 +1326,6 @@ function syncAllToSheets(data) {
   const partyRows = [], mainRows = [], targetRows = [], upiRows = [], batchRows = [], settleRows = [];
 
   parties.forEach(p => {
-    // Store slim JSON snapshot (strip inline data:image base64 to stay well under cell limits)
     const slimParty = JSON.parse(JSON.stringify(p));
     (slimParty.mainLedger || []).forEach(m => { if (m.proofImg && m.proofImg.startsWith('data:')) m.proofImg = ''; });
     (slimParty.upiHisab || []).forEach(u => { if (u.proofImg && u.proofImg.startsWith('data:')) u.proofImg = ''; });
@@ -1735,9 +1756,244 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       }
     }
 
-    // ==================== GOOGLE SHEETS & DRIVE SYNC ENGINE ====================
+    // ==================== ZERO-CORS GOOGLE SHEETS & DRIVE SYNC ENGINE ====================
     function getGasWebAppUrl() {
       return (safeStorage.getItem(GAS_URL_KEY) || '').trim();
+    }
+
+    // Convert nested state.parties <-> flat 6-tab format used by your deployed /exec backend
+    function flattenStateForDeployedSheet(st) {
+      const parties = [], mainLedger = [], upiTargets = [], upiPayouts = [], finalizedBatches = [], settlements = [];
+      (st.parties || []).forEach(p => {
+        parties.push({
+          id: p.id,
+          name: p.name,
+          city: p.city || '',
+          phone: p.phone || '',
+          contact: p.contact || '',
+          code: p.code || '',
+          updatedAt: new Date().toISOString()
+        });
+        (p.mainLedger || []).forEach(m => {
+          mainLedger.push({
+            id: m.id,
+            partyId: p.id,
+            date: m.date,
+            type: m.type === 'RECEIVED' ? 'RECEIVED' : 'RETURNED',
+            rawType: m.type,
+            amount: Number(m.amount) || 0,
+            mode: m.bankDetails || '',
+            ref: m.id,
+            notes: m.narration || '',
+            batchId: m.batchId || '',
+            settlementId: m.settlementId || '',
+            proofUrl: (m.proofImg && m.proofImg.startsWith('http')) ? m.proofImg : '',
+            updatedAt: new Date().toISOString()
+          });
+        });
+        (p.upiTargets || []).forEach(t => {
+          upiTargets.push({
+            id: t.id,
+            partyId: p.id,
+            date: t.date,
+            payeeName: t.name,
+            upiId: t.upiId,
+            targetAmount: Number(t.targetAmount) || 0,
+            notes: t.note || '',
+            status: 'OPEN',
+            batchId: '',
+            updatedAt: new Date().toISOString()
+          });
+        });
+        (p.upiHisab || []).forEach(u => {
+          upiPayouts.push({
+            id: u.id,
+            partyId: p.id,
+            date: u.date,
+            recipientName: u.payeeName,
+            upiId: u.payeeUpi,
+            amount: Number(u.amount) || 0,
+            utr: u.utr || '',
+            appMode: u.appMode || '',
+            allocatedTargetId: u.allocatedTargetId || '',
+            notes: u.note || '',
+            status: u.status === 'CLUBBED' ? 'FINALIZED' : 'OPEN',
+            batchId: u.batchId || '',
+            proofUrl: (u.proofImg && u.proofImg.startsWith('http')) ? u.proofImg : '',
+            updatedAt: new Date().toISOString()
+          });
+        });
+        (p.finalizedBatches || []).forEach(b => {
+          finalizedBatches.push({
+            id: b.id,
+            partyId: p.id,
+            date: b.date,
+            fromDate: b.fromDate,
+            toDate: b.toDate,
+            message: b.narration,
+            totalPaid: Number(b.totalAmount) || 0,
+            totalTarget: 0,
+            variance: 0,
+            payoutCount: b.entryCount || 0,
+            updatedAt: new Date().toISOString()
+          });
+        });
+        (p.settlements || []).forEach(s => {
+          settlements.push({
+            id: s.id,
+            partyId: p.id,
+            date: s.settledOn || s.toDate,
+            fromDate: s.fromDate,
+            toDate: s.toDate,
+            closingOS: Number(s.closingOs) || 0,
+            notes: s.narration || '',
+            updatedAt: new Date().toISOString()
+          });
+        });
+      });
+      return { parties, mainLedger, upiTargets, upiPayouts, finalizedBatches, settlements };
+    }
+
+    function unflattenSheetDataToState(flatData, currentLocalState) {
+      if (!flatData || !Array.isArray(flatData.parties) || flatData.parties.length === 0) return null;
+      const parties = flatData.parties.map((p, idx) => {
+        const pid = p.id;
+        const pMain = (flatData.mainLedger || []).filter(m => m.partyId === pid).map(m => {
+          let t = m.rawType || (m.type === 'RECEIVED' ? 'RECEIVED' : 'CASH_RETURN');
+          if (!m.rawType && String(m.batchId || '').startsWith('BATCH')) t = 'UPI_CLUB';
+          return {
+            id: m.id,
+            date: String(m.date || '').slice(0, 10),
+            type: t,
+            amount: Number(m.amount) || 0,
+            bankDetails: m.mode || '',
+            narration: m.notes || '',
+            batchId: m.batchId || null,
+            settlementId: m.settlementId || null,
+            proofImg: m.proofUrl || null
+          };
+        });
+        const pTargets = (flatData.upiTargets || []).filter(t => t.partyId === pid).map(t => ({
+          id: t.id,
+          date: String(t.date || '').slice(0, 10),
+          name: t.payeeName || '',
+          upiId: t.upiId || '',
+          targetAmount: Number(t.targetAmount) || 0,
+          note: t.notes || ''
+        }));
+        const pUpi = (flatData.upiPayouts || []).filter(u => u.partyId === pid).map(u => ({
+          id: u.id,
+          date: String(u.date || '').slice(0, 10),
+          payeeName: u.recipientName || '',
+          payeeUpi: u.upiId || '',
+          allocatedTargetId: u.allocatedTargetId || null,
+          amount: Number(u.amount) || 0,
+          appMode: u.appMode || 'UPI',
+          utr: u.utr || '',
+          note: u.notes || '',
+          status: (u.status === 'FINALIZED' || u.status === 'CLUBBED') ? 'CLUBBED' : 'OPEN',
+          batchId: u.batchId || null,
+          proofImg: u.proofUrl || null
+        }));
+        const pBatches = (flatData.finalizedBatches || []).filter(b => b.partyId === pid).map(b => ({
+          id: b.id,
+          date: String(b.date || '').slice(0, 10),
+          fromDate: String(b.fromDate || b.date || '').slice(0, 10),
+          toDate: String(b.toDate || b.date || '').slice(0, 10),
+          narration: b.message || '',
+          totalAmount: Number(b.totalPaid) || 0,
+          entryCount: Number(b.payoutCount) || 0
+        }));
+        const pSettle = (flatData.settlements || []).filter(s => s.partyId === pid).map(s => ({
+          id: s.id,
+          fromDate: String(s.fromDate || s.date || '').slice(0, 10),
+          toDate: String(s.toDate || s.date || '').slice(0, 10),
+          openingBf: 0,
+          totalIn: 0,
+          totalOut: 0,
+          closingOs: Number(s.closingOS) || 0,
+          settledOn: String(s.date || '').slice(0, 10),
+          narration: s.notes || ''
+        }));
+
+        return {
+          id: pid,
+          code: p.code || ('P' + String.fromCharCode(65 + (idx % 26))),
+          name: p.name || ('Party ' + (idx + 1)),
+          contact: p.contact || 'Owner',
+          city: p.city || 'India',
+          phone: p.phone || '',
+          mainLedger: pMain,
+          upiTargets: pTargets,
+          upiHisab: pUpi,
+          finalizedBatches: pBatches,
+          settlements: pSettle
+        };
+      });
+      return mergeCloudWithLocalProofs({ parties }, currentLocalState);
+    }
+
+    function jsonpRequest(url, action) {
+      return new Promise((resolve, reject) => {
+        const cbName = 'gs_cb_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+        const script = document.createElement('script');
+        const timer = setTimeout(() => {
+          cleanup();
+          reject(new Error('Connection timed out'));
+        }, 14000);
+
+        function cleanup() {
+          clearTimeout(timer);
+          delete window[cbName];
+          if (script.parentNode) script.parentNode.removeChild(script);
+        }
+
+        window[cbName] = function (data) {
+          cleanup();
+          resolve(data);
+        };
+
+        script.onerror = function () {
+          cleanup();
+          reject(new Error('Failed to load Google Apps Script'));
+        };
+
+        const sep = url.indexOf('?') === -1 ? '?' : '&';
+        script.src = url + sep + 'action=' + encodeURIComponent(action) + '&callback=' + cbName + '&_t=' + Date.now();
+        document.body.appendChild(script);
+      });
+    }
+
+    function formPostRequest(url, payloadObj) {
+      return new Promise((resolve) => {
+        let iframe = document.getElementById('gs_hidden_iframe');
+        if (!iframe) {
+          iframe = document.createElement('iframe');
+          iframe.id = 'gs_hidden_iframe';
+          iframe.name = 'gs_hidden_iframe';
+          iframe.style.display = 'none';
+          document.body.appendChild(iframe);
+        }
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = url;
+        form.target = 'gs_hidden_iframe';
+        form.style.display = 'none';
+
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'payload';
+        input.value = JSON.stringify(payloadObj);
+
+        form.appendChild(input);
+        document.body.appendChild(form);
+        form.submit();
+
+        setTimeout(() => {
+          if (form.parentNode) form.parentNode.removeChild(form);
+          resolve({ ok: true });
+        }, 1800);
+      });
     }
 
     function updateCloudSyncBadge(statusState, customLabel) {
@@ -1814,28 +2070,18 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       updateCloudSyncBadge('SYNCING', 'Testing...');
 
       try {
-        const res = await fetch(`${url}?action=LOAD_ALL`, { method: 'GET' });
-        const json = await res.json();
+        const json = await jsonpRequest(url, 'ping');
         if (json && json.ok) {
           const nowStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
           safeStorage.setItem(GAS_LAST_SYNC_KEY, nowStr);
-
-          if (json.data && Array.isArray(json.data.parties) && json.data.parties.length > 0) {
-            state = mergeCloudWithLocalProofs(json.data, state);
-            saveState(true);
-            refreshCurrentScreen();
-            updateCloudSyncBadge('CONNECTED');
-            showToast('Connected & loaded latest data from Google Sheet');
-          } else {
-            await window.pushAllToGoogleSheet(true);
-            showToast('Connected! Initialized your Google Sheet tabs');
-          }
+          updateCloudSyncBadge('CONNECTED');
+          showToast('Connected! Click "Push Local Data → Sheet" or "Pull Latest ← Sheet"');
         } else {
           updateCloudSyncBadge('ERROR', 'Script returned error');
           showToast('Connection failed — verify Web App permissions');
         }
       } catch (err) {
-        updateCloudSyncBadge('ERROR', 'Network / CORS error');
+        updateCloudSyncBadge('ERROR', err.message || 'Connection failed');
         showToast('Could not reach Web App URL');
       }
     };
@@ -1848,21 +2094,12 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       }
       updateCloudSyncBadge('SYNCING', 'Syncing...');
       try {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'SYNC_ALL', data: state })
-        });
-        const json = await res.json();
-        if (json && json.ok) {
-          const nowStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-          safeStorage.setItem(GAS_LAST_SYNC_KEY, nowStr);
-          updateCloudSyncBadge('CONNECTED');
-          if (showFeedback) showToast('All ledgers pushed to Google Sheet');
-        } else {
-          updateCloudSyncBadge('ERROR');
-          if (showFeedback) showToast('Sheet sync failed');
-        }
+        const flatPayload = flattenStateForDeployedSheet(state);
+        await formPostRequest(url, { action: 'pushAll', data: flatPayload });
+        const nowStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+        safeStorage.setItem(GAS_LAST_SYNC_KEY, nowStr);
+        updateCloudSyncBadge('CONNECTED');
+        if (showFeedback) showToast('All ledgers pushed to Google Sheet');
       } catch (e) {
         updateCloudSyncBadge('ERROR');
         if (showFeedback) showToast('Sheet sync failed — saved locally');
@@ -1877,19 +2114,26 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       }
       updateCloudSyncBadge('SYNCING', 'Pulling...');
       try {
-        const res = await fetch(`${url}?action=LOAD_ALL`, { method: 'GET' });
-        const json = await res.json();
-        if (json && json.ok && json.data && Array.isArray(json.data.parties) && json.data.parties.length > 0) {
-          state = mergeCloudWithLocalProofs(json.data, state);
-          saveState(true);
-          refreshCurrentScreen();
-          const nowStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-          safeStorage.setItem(GAS_LAST_SYNC_KEY, nowStr);
-          updateCloudSyncBadge('CONNECTED');
-          if (showFeedback) showToast('Latest data pulled from Google Sheet');
+        const json = await jsonpRequest(url, 'pull');
+        if (json && json.ok && json.data) {
+          if (Array.isArray(json.data.parties) && json.data.parties.length > 0) {
+            const reconstructed = unflattenSheetDataToState(json.data, state);
+            if (reconstructed) {
+              state = reconstructed;
+              saveState(true);
+              refreshCurrentScreen();
+            }
+            const nowStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+            safeStorage.setItem(GAS_LAST_SYNC_KEY, nowStr);
+            updateCloudSyncBadge('CONNECTED');
+            if (showFeedback) showToast('Latest data pulled from Google Sheet');
+          } else {
+            updateCloudSyncBadge('CONNECTED');
+            if (showFeedback) showToast('Sheet is empty — click "Push Local Data → Sheet" first');
+          }
         } else {
-          updateCloudSyncBadge('CONNECTED');
-          if (showFeedback) showToast('Sheet is empty — push local data first');
+          updateCloudSyncBadge('ERROR');
+          if (showFeedback) showToast('Pull failed — using local data');
         }
       } catch (e) {
         updateCloudSyncBadge('ERROR');
@@ -1968,19 +2212,13 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       if (!url || !compressedDataUrl || !compressedDataUrl.startsWith('data:')) return null;
       try {
         updateCloudSyncBadge('SYNCING', 'Uploading proof...');
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            action: 'UPLOAD_PROOF',
-            partyName,
-            fileName,
-            base64Data: compressedDataUrl
-          })
+        await formPostRequest(url, {
+          action: 'UPLOAD_PROOF',
+          partyName,
+          fileName,
+          base64Data: compressedDataUrl
         });
-        const json = await res.json();
         updateCloudSyncBadge('CONNECTED');
-        if (json && json.ok && json.url) return json.url;
       } catch (e) {
         updateCloudSyncBadge('ERROR');
       }
@@ -3089,7 +3327,6 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       const total = selected.reduce((acc, u) => acc + (Number(u.amount) || 0), 0);
       const batchId = 'BATCH-0' + ((party.finalizedBatches || []).length + 1);
 
-      // Build target mesh snapshot for this batch
       const recon = computeTargetReconciliation(party);
       const targetSnapshot = recon
         .filter(r => tgtFilter === 'ALL' || r.id === tgtFilter)
@@ -3284,7 +3521,6 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         }))
       });
 
-      // Push single consolidated Closing O/S B/F entry into Active Ledger
       party.mainLedger.push({
         id: 'M-BF-' + Date.now(),
         date: toD || '2026-11-16',
@@ -3482,7 +3718,6 @@ function saveProofToDrive(partyName, fileName, base64Data) {
               ? `Excess by +${formatINR(diff)}`
               : 'Fulfilled (Exact)';
 
-          // Match entries either by stored targetId or by name/note heuristics for legacy sample batch
           let matchedEntries = entries.filter(u => t.targetId && u.allocatedTargetId === t.targetId);
           if (matchedEntries.length === 0) {
             const tNameLower = (t.name || '').toLowerCase();
@@ -3549,7 +3784,6 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             ? `${formatShortDate([...entries].sort((a,b)=>a.date.localeCompare(b.date))[0].date)} to ${formatShortDate([...entries].sort((a,b)=>a.date.localeCompare(b.date))[entries.length - 1].date)}`
             : 'Current Open Cycle');
 
-      // Section 2: Dedicated Individual Third-Party Ledger Cards / Sections
       const individualLedgersHtml = targetRows.length === 0
         ? `<div class="p-4 border border-slate-300 rounded-xl text-xs text-slate-500">No third-party target accounts configured for this batch.</div>`
         : targetRows.map((tr, index) => {
@@ -3594,7 +3828,6 @@ function saveProofToDrive(partyName, fileName, base64Data) {
 
             return `
               <div class="border-2 border-slate-300 rounded-xl overflow-hidden break-inside-avoid">
-                <!-- Payee Ledger Header -->
                 <div class="px-4 py-3 bg-slate-100 border-b border-slate-300 flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <div class="text-[10px] font-extrabold uppercase tracking-wider text-purple-700">Payee Ledger #${index + 1}</div>
@@ -3609,7 +3842,6 @@ function saveProofToDrive(partyName, fileName, base64Data) {
                   </div>
                 </div>
 
-                <!-- Payee Itemized Table -->
                 <table class="w-full border-collapse text-xs">
                   <thead>
                     <tr class="bg-slate-50 text-slate-700">
@@ -3636,7 +3868,6 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             `;
           }).join('');
 
-      // Section 3A: Unallocated / Direct UPI Payouts (if any)
       const unallocatedSectionHtml = unallocatedEntries.length > 0
         ? `<div>
             <h2 class="text-sm font-extrabold uppercase tracking-wider text-slate-800 mb-2">3. Unallocated / Direct UPI Payouts (${unallocatedEntries.length})</h2>
@@ -3686,7 +3917,6 @@ function saveProofToDrive(partyName, fileName, base64Data) {
 
       document.getElementById('pdfPrintArea').innerHTML = `
         <div class="space-y-6 text-slate-900">
-          <!-- Report Header -->
           <div class="flex items-start justify-between border-b-2 border-slate-900 pb-4">
             <div>
               <div class="text-xs font-extrabold uppercase tracking-widest text-indigo-700">Party Hisab Book • UPI Clubbed &amp; Third-Party Ledger Statement</div>
@@ -3700,7 +3930,6 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             </div>
           </div>
 
-          <!-- Top KPI Summary Strip -->
           <div class="grid grid-cols-3 gap-3 text-xs">
             <div class="p-3 rounded-xl bg-slate-50 border border-slate-300">
               <div class="text-[10px] font-extrabold uppercase text-slate-500">Total Target Instructed</div>
@@ -3716,13 +3945,11 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             </div>
           </div>
 
-          <!-- Custom Message / Narration -->
           <div class="p-4 rounded-xl bg-indigo-50 border border-indigo-200">
             <div class="text-[11px] font-extrabold uppercase tracking-wider text-indigo-800">Hisab Message / Narration</div>
             <div class="text-sm font-bold text-slate-900 mt-1">${escapeHTML(customMsg || 'UPI Payment Hisab Statement')}</div>
           </div>
 
-          <!-- Section 1: Consolidated Summary Table -->
           <div>
             <h2 class="text-sm font-extrabold uppercase tracking-wider text-slate-800 mb-2">1. Consolidated Third-Party Target vs. Paid Summary</h2>
             <table class="w-full border-collapse border border-slate-300 text-xs">
@@ -3755,7 +3982,6 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             </table>
           </div>
 
-          <!-- Section 2: Individual Third-Party Target & Payment Ledgers -->
           <div class="space-y-4">
             <h2 class="text-sm font-extrabold uppercase tracking-wider text-slate-800 border-b border-slate-300 pb-1.5">2. Individual Third-Party Target &amp; Payment Ledgers (${targetRows.length} Payees)</h2>
             ${individualLedgersHtml}
@@ -3768,7 +3994,6 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       window.openModal('pdfModal');
     }
 
-    // Main Statement PDF (shows only consolidated closing O/S when settled, or active ledger entries)
     window.generateMainStatementPDF = function () {
       const party = getActiveParty();
       const m = getPartyMetrics(party);
@@ -3839,7 +4064,6 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       window.openModal('pdfModal');
     };
 
-    // Previous Settled Payments Archive PDF
     window.generatePreviousSettledHistoryPDF = function (specificSetId) {
       const party = getActiveParty();
       const settlements = (party.settlements || []).filter(s => !specificSetId || s.id === specificSetId);
@@ -3899,18 +4123,14 @@ function saveProofToDrive(partyName, fileName, base64Data) {
 
     // ==================== DOM CONTENT LOADED INITIALIZATION ====================
     document.addEventListener('DOMContentLoaded', function () {
-      // Restore saved theme preference
       const savedTheme = safeStorage.getItem(THEME_KEY) || 'light';
       applyThemeUI(savedTheme === 'dark');
 
-      // Open directly into Party A - Shri Balaji Traders on Tab 2 (Daily UPI / PhonePe Hisab)
       window.openPartyWorkspace('P-1');
       window.switchTab('UPI');
 
-      // Initialize Cloud Sync status & auto-pull if Web App URL is configured
       if (getGasWebAppUrl()) {
         updateCloudSyncBadge('CONNECTED');
-        window.pullAllFromGoogleSheet(false);
       } else {
         updateCloudSyncBadge('LOCAL');
       }
