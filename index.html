@@ -4,26 +4,89 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Party Hisab Book</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%234f46e5'/%3E%3Cstop offset='50%25' stop-color='%237c3aed'/%3E%3Cstop offset='100%25' stop-color='%2310b981'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='url(%23g)'/%3E%3Cpath d='M18 16h22a6 6 0 0 1 6 6v20a6 6 0 0 1-6 6H18V16z' fill='%23ffffff' fill-opacity='0.95'/%3E%3Cpath d='M24 24h16M24 31h12M24 38h14' stroke='%234f46e5' stroke-width='3' stroke-linecap='round'/%3E%3Ccircle cx='46' cy='46' r='11' fill='%23f59e0b' stroke='%23ffffff' stroke-width='2.5'/%3E%3Ctext x='46' y='50' text-anchor='middle' font-family='Arial,sans-serif' font-weight='bold' font-size='12' fill='%23ffffff'%3E%E2%82%B9%3C/text%3E%3C/svg%3E" />
   <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-app: #f0f4ff; --bg-card: #ffffff; --bg-subtle: #f5f8ff; --bg-header: rgba(255,255,255,0.92);
-      --bg-input: #ffffff; --border-card: #e1e8f8; --border-subtle: #edf2fc; --border-input: #cbd5e1;
-      --text-primary: #0f172a; --text-secondary: #475569; --text-muted: #64748b;
+      --bg-app: #f0f4ff;
+      --bg-card: #ffffff;
+      --bg-subtle: #f5f8ff;
+      --bg-header: rgba(255, 255, 255, 0.92);
+      --bg-input: #ffffff;
+      --border-card: #e1e8f8;
+      --border-subtle: #edf2fc;
+      --border-input: #cbd5e1;
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #64748b;
+      --shadow-card: 0 4px 20px -2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
+      --accent-indigo: #4f46e5;
     }
+
     html.dark {
-      --bg-app: #080d1a; --bg-card: #111827; --bg-subtle: #192236; --bg-header: rgba(11,17,32,0.92);
-      --bg-input: #0b1120; --border-card: #1f2b42; --border-subtle: #182236; --border-input: #2c3b59;
-      --text-primary: #f8fafc; --text-secondary: #cbd5e1; --text-muted: #94a3b8;
+      --bg-app: #080d1a;
+      --bg-card: #111827;
+      --bg-subtle: #192236;
+      --bg-header: rgba(11, 17, 32, 0.92);
+      --bg-input: #0b1120;
+      --border-card: #1f2b42;
+      --border-subtle: #182236;
+      --border-input: #2c3b59;
+      --text-primary: #f8fafc;
+      --text-secondary: #cbd5e1;
+      --text-muted: #94a3b8;
+      --shadow-card: 0 10px 28px -4px rgba(0, 0, 0, 0.45);
+      --accent-indigo: #6366f1;
     }
-    * { box-sizing: border-box; font-family: 'Inter', sans-serif; }
-    body { background-color: var(--bg-app); color: var(--text-primary); margin: 0; }
-    .app-card { background-color: var(--bg-card); border: 1px solid var(--border-card); }
-    .app-subtle { background-color: var(--bg-subtle); border: 1px solid var(--border-subtle); }
-    .app-input { background-color: var(--bg-input); border: 1px solid var(--border-input); color: var(--text-primary); }
-    .tabular-nums { font-variant-numeric: tabular-nums; }
-    @media print { .no-print { display: none !important; } body { background: #fff !important; color: #000 !important; } }
+
+    * {
+      box-sizing: border-box;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-app);
+      color: var(--text-primary);
+      margin: 0;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    .app-card {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-card);
+      box-shadow: var(--shadow-card);
+    }
+
+    .app-subtle {
+      background-color: var(--bg-subtle);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .app-input {
+      background-color: var(--bg-input);
+      border: 1px solid var(--border-input);
+      color: var(--text-primary);
+    }
+
+    .app-input:focus {
+      outline: none;
+      border-color: var(--accent-indigo);
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.16);
+    }
+
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+
+    @media print {
+      .no-print { display: none !important; }
+      body { background: #fff !important; color: #000 !important; }
+      .app-card { box-shadow: none !important; border: 1px solid #ddd !important; }
+      .print-full { display: block !important; }
+    }
   </style>
 </head>
 <body class="min-h-screen pb-20">
@@ -32,44 +95,216 @@
 
   <script>
     (function () {
-      const STORAGE_KEY = 'party_hisab_book_v4';
+      const STORAGE_KEY = 'party_hisab_book_v3';
       const SYNC_URL_KEY = 'party_hisab_gs_url';
       const THEME_KEY = 'party_hisab_theme';
 
       const defaultState = {
-        activePartyId: 'party_1', activeTab: 'ledger',
-        parties: [{ id: 'party_1', name: 'Party A - Shri Balaji Traders', city: 'Ranchi', phone: '98351 44210' }],
-        mainLedger: [{ id: 'led_101', partyId: 'party_1', date: '2026-11-18', type: 'RECEIVED', amount: 2500000, mode: 'RTGS', ref: 'HDFCR520261118001', notes: 'Advance inward' }],
-        upiTargets: [], upiPayouts: [], finalizedBatches: [], settlements: []
+        activePartyId: 'party_1',
+        activeTab: 'ledger',
+        statementMode: false,
+        parties: [
+          {
+            id: 'party_1',
+            name: 'Party A - Shri Balaji Traders',
+            city: 'Ranchi',
+            phone: '98351 44210',
+            updatedAt: new Date().toISOString()
+          }
+        ],
+        mainLedger: [
+          {
+            id: 'led_101',
+            partyId: 'party_1',
+            date: '2026-11-18',
+            type: 'RECEIVED',
+            amount: 2500000,
+            mode: 'RTGS',
+            ref: 'HDFCR520261118001',
+            notes: 'Advance inward transfer',
+            batchId: '',
+            proofUrl: '',
+            updatedAt: new Date().toISOString()
+          },
+          {
+            id: 'led_102',
+            partyId: 'party_1',
+            date: '2026-11-20',
+            type: 'RETURNED',
+            amount: 150000,
+            mode: 'NEFT',
+            ref: 'NEFT882910',
+            notes: 'Direct bank return',
+            batchId: '',
+            proofUrl: '',
+            updatedAt: new Date().toISOString()
+          }
+        ],
+        upiTargets: [
+          {
+            id: 'tgt_201',
+            partyId: 'party_1',
+            date: '2026-11-21',
+            payeeName: 'Verma Transport',
+            upiId: 'vermatransport@okaxis',
+            targetAmount: 85000,
+            notes: 'Freight settlement',
+            status: 'OPEN',
+            batchId: '',
+            updatedAt: new Date().toISOString()
+          }
+        ],
+        upiPayouts: [
+          {
+            id: 'pay_301',
+            partyId: 'party_1',
+            date: '2026-11-21',
+            recipientName: 'Verma Transport',
+            upiId: 'vermatransport@okaxis',
+            amount: 50000,
+            utr: '632519847120',
+            appMode: 'GPay',
+            allocatedTargetId: 'tgt_201',
+            notes: 'Part 1 UPI sent',
+            status: 'OPEN',
+            batchId: '',
+            proofUrl: '',
+            updatedAt: new Date().toISOString()
+          }
+        ],
+        finalizedBatches: [],
+        settlements: []
       };
 
-      let state = (() => {
-        try { return Object.assign({}, defaultState, JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') || {}); }
-        catch (e) { return JSON.parse(JSON.stringify(defaultState)); }
-      })();
+      function loadState() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('party_hisab_book_v4');
+          if (!raw) return JSON.parse(JSON.stringify(defaultState));
+          const parsed = JSON.parse(raw);
+          return Object.assign({}, JSON.parse(JSON.stringify(defaultState)), parsed);
+        } catch (e) {
+          return JSON.parse(JSON.stringify(defaultState));
+        }
+      }
 
+      let state = loadState();
       let syncUrl = localStorage.getItem(SYNC_URL_KEY) || '';
-      let syncStatus = syncUrl ? 'Saved URL' : 'Local Mode';
+      let syncStatus = syncUrl ? 'Saved URL (Not tested)' : 'Local Mode';
+      let syncErrorDetail = '';
       let lastSyncTime = 'Not synced yet';
       let isSyncModalOpen = false;
       let isAddPartyModalOpen = false;
       let isSyncing = false;
+      let previewImageUrl = '';
+      let ledgerFilter = '';
+      let upiFilter = '';
 
-      if (localStorage.getItem(THEME_KEY) === 'dark') document.documentElement.classList.add('dark');
+      if (localStorage.getItem(THEME_KEY) === 'dark') {
+        document.documentElement.classList.add('dark');
+      }
 
-      const saveLocal = () => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {} };
-      const formatINR = n => '₹' + (Number(n) || 0).toLocaleString('en-IN');
-      const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-      const getActiveParty = () => state.parties.find(p => p.id === state.activePartyId) || state.parties[0];
+      function saveLocal() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch (e) {
+          console.warn('LocalStorage save failed:', e);
+        }
+      }
 
-      // ZERO-CORS JSONP GET REQUEST
+      function formatINR(num) {
+        const val = Number(num) || 0;
+        return '₹' + val.toLocaleString('en-IN');
+      }
+
+      function esc(str) {
+        return String(str == null ? '' : str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function getActiveParty() {
+        return state.parties.find(p => p.id === state.activePartyId) || state.parties[0] || {
+          id: 'party_1',
+          name: 'Default Party',
+          city: '',
+          phone: ''
+        };
+      }
+
+      function computePartyMetrics(partyId) {
+        const ledger = state.mainLedger.filter(x => x.partyId === partyId);
+        const targets = state.upiTargets.filter(x => x.partyId === partyId);
+        const payouts = state.upiPayouts.filter(x => x.partyId === partyId);
+
+        const totalReceived = ledger
+          .filter(x => x.type === 'RECEIVED')
+          .reduce((s, x) => s + (Number(x.amount) || 0), 0);
+
+        const mainReturned = ledger
+          .filter(x => x.type === 'RETURNED')
+          .reduce((s, x) => s + (Number(x.amount) || 0), 0);
+
+        const openUpiPaid = payouts
+          .filter(x => x.status !== 'FINALIZED')
+          .reduce((s, x) => s + (Number(x.amount) || 0), 0);
+
+        const openUpiTarget = targets
+          .filter(x => x.status !== 'FINALIZED')
+          .reduce((s, x) => s + (Number(x.targetAmount) || 0), 0);
+
+        const mainLedgerOS = totalReceived - mainReturned;
+        const totalNetOS = mainLedgerOS - openUpiPaid;
+
+        return {
+          totalReceived,
+          mainReturned,
+          mainLedgerOS,
+          openUpiPaid,
+          openUpiTarget,
+          totalNetOS,
+          ledger,
+          targets,
+          payouts
+        };
+      }
+
+      function readFileAsCompressedDataUrl(file) {
+        return new Promise((resolve) => {
+          if (!file) return resolve('');
+          const reader = new FileReader();
+          reader.onload = function (ev) {
+            const img = new Image();
+            img.onload = function () {
+              const canvas = document.createElement('canvas');
+              const maxW = 1024;
+              const scale = img.width > maxW ? (maxW / img.width) : 1;
+              canvas.width = Math.round(img.width * scale);
+              canvas.height = Math.round(img.height * scale);
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              resolve(canvas.toDataURL('image/jpeg', 0.78));
+            };
+            img.onerror = function () { resolve(ev.target.result || ''); };
+            img.src = ev.target.result;
+          };
+          reader.onerror = function () { resolve(''); };
+          reader.readAsDataURL(file);
+        });
+      }
+
+      // ZERO-CORS JSONP GET ENGINE
       function jsonpGet(action) {
         return new Promise((resolve, reject) => {
           const url = String(syncUrl || '').trim();
-          if (!url) return reject(new Error('Enter Web App URL first'));
+          if (!url) return reject(new Error('Please paste your https://script.google.com/macros/s/.../exec URL'));
           const cbName = 'gs_cb_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
           const script = document.createElement('script');
-          const timer = setTimeout(() => { cleanup(); reject(new Error('Timeout: Check Web App URL & "Anyone" permission')); }, 12000);
+          const timer = setTimeout(() => {
+            cleanup();
+            reject(new Error('Connection timed out. Verify Web App URL and "Who has access: Anyone".'));
+          }, 14000);
 
           function cleanup() {
             clearTimeout(timer);
@@ -84,7 +319,7 @@
 
           script.onerror = function () {
             cleanup();
-            reject(new Error('Failed to load script. Ensure access is set to "Anyone".'));
+            reject(new Error('Failed to load Google Apps Script. Check URL and set access to "Anyone".'));
           };
 
           const sep = url.indexOf('?') === -1 ? '?' : '&';
@@ -93,11 +328,11 @@
         });
       }
 
-      // ZERO-CORS HIDDEN FORM POST REQUEST
+      // ZERO-CORS HIDDEN FORM POST ENGINE
       function formPost(payloadObj) {
         return new Promise((resolve, reject) => {
           const url = String(syncUrl || '').trim();
-          if (!url) return reject(new Error('Enter Web App URL first'));
+          if (!url) return reject(new Error('Please paste your https://script.google.com/macros/s/.../exec URL'));
 
           const form = document.createElement('form');
           form.method = 'POST';
@@ -117,296 +352,965 @@
           setTimeout(() => {
             if (form.parentNode) form.parentNode.removeChild(form);
             resolve({ ok: true });
-          }, 1800);
+          }, 2000);
         });
       }
 
       async function testConnection() {
-        isSyncing = true; syncStatus = 'Connecting...'; render();
+        const url = String(syncUrl || '').trim();
+        if (!url) {
+          syncStatus = 'Enter Web App URL first';
+          syncErrorDetail = 'Please paste your https://script.google.com/macros/s/.../exec URL';
+          render();
+          return;
+        }
+        isSyncing = true;
+        syncStatus = 'Connecting...';
+        syncErrorDetail = '';
+        render();
+
         try {
-          const res = await jsonpGet('ping');
-          if (res && res.ok) {
-            localStorage.setItem(SYNC_URL_KEY, syncUrl.trim());
+          const json = await jsonpGet('ping');
+          if (json && json.ok === true) {
+            localStorage.setItem(SYNC_URL_KEY, url);
+            syncUrl = url;
             syncStatus = 'Connected';
+            syncErrorDetail = '';
             lastSyncTime = new Date().toLocaleTimeString();
           } else {
-            syncStatus = 'Error: ' + ((res && res.error) || 'Unknown');
+            syncStatus = 'Script returned error';
+            syncErrorDetail = (json && json.error) ? json.error : 'Unknown script response';
           }
-        } catch (e) {
-          syncStatus = e.message;
+        } catch (err) {
+          syncStatus = 'Connection error';
+          syncErrorDetail = err && err.message ? err.message : String(err);
+        } finally {
+          isSyncing = false;
+          render();
         }
-        isSyncing = false; render();
       }
 
       async function pushToSheet() {
-        isSyncing = true; syncStatus = 'Pushing...'; render();
+        const url = String(syncUrl || '').trim();
+        if (!url) {
+          syncStatus = 'Enter Web App URL first';
+          render();
+          return;
+        }
+        isSyncing = true;
+        syncStatus = 'Pushing to Sheet...';
+        syncErrorDetail = '';
+        render();
+
         try {
           await formPost({
             action: 'pushAll',
             data: {
-              parties: state.parties, mainLedger: state.mainLedger,
-              upiTargets: state.upiTargets, upiPayouts: state.upiPayouts,
-              finalizedBatches: state.finalizedBatches, settlements: state.settlements
+              parties: state.parties,
+              mainLedger: state.mainLedger,
+              upiTargets: state.upiTargets,
+              upiPayouts: state.upiPayouts,
+              finalizedBatches: state.finalizedBatches,
+              settlements: state.settlements
             }
           });
-          localStorage.setItem(SYNC_URL_KEY, syncUrl.trim());
+          localStorage.setItem(SYNC_URL_KEY, url);
           syncStatus = 'Connected & Synced';
+          syncErrorDetail = '';
           lastSyncTime = new Date().toLocaleTimeString();
-        } catch (e) {
-          syncStatus = e.message;
+        } catch (err) {
+          syncStatus = 'Push error';
+          syncErrorDetail = err && err.message ? err.message : String(err);
+        } finally {
+          isSyncing = false;
+          render();
         }
-        isSyncing = false; render();
       }
 
       async function pullFromSheet() {
-        isSyncing = true; syncStatus = 'Pulling...'; render();
+        const url = String(syncUrl || '').trim();
+        if (!url) {
+          syncStatus = 'Enter Web App URL first';
+          render();
+          return;
+        }
+        isSyncing = true;
+        syncStatus = 'Pulling from Sheet...';
+        syncErrorDetail = '';
+        render();
+
         try {
-          const res = await jsonpGet('pull');
-          if (res && res.ok && res.data) {
-            if (res.data.parties && res.data.parties.length) {
-              state.parties = res.data.parties;
-              if (!state.parties.some(p => p.id === state.activePartyId)) state.activePartyId = state.parties[0].id;
+          const json = await jsonpGet('pull');
+          if (json && json.ok === true && json.data) {
+            if (Array.isArray(json.data.parties) && json.data.parties.length > 0) {
+              state.parties = json.data.parties;
+              if (!state.parties.some(p => p.id === state.activePartyId)) {
+                state.activePartyId = state.parties[0].id;
+              }
             }
-            state.mainLedger = res.data.mainLedger || [];
-            state.upiTargets = res.data.upiTargets || [];
-            state.upiPayouts = res.data.upiPayouts || [];
-            state.finalizedBatches = res.data.finalizedBatches || [];
-            state.settlements = res.data.settlements || [];
+            state.mainLedger = json.data.mainLedger || [];
+            state.upiTargets = json.data.upiTargets || [];
+            state.upiPayouts = json.data.upiPayouts || [];
+            state.finalizedBatches = json.data.finalizedBatches || [];
+            state.settlements = json.data.settlements || [];
             saveLocal();
             syncStatus = 'Pulled Latest Sheet';
+            syncErrorDetail = '';
             lastSyncTime = new Date().toLocaleTimeString();
           } else {
-            syncStatus = 'Error: ' + ((res && res.error) || 'Pull failed');
+            syncStatus = 'Script returned error';
+            syncErrorDetail = (json && json.error) ? json.error : 'Pull failed';
           }
-        } catch (e) {
-          syncStatus = e.message;
+        } catch (err) {
+          syncStatus = 'Pull error';
+          syncErrorDetail = err && err.message ? err.message : String(err);
+        } finally {
+          isSyncing = false;
+          render();
         }
-        isSyncing = false; render();
       }
 
-      function autoSync() {
+      function autoSyncIfConnected() {
         saveLocal();
-        if (syncUrl && syncStatus.indexOf('Connected') !== -1) pushToSheet();
+        if (syncUrl && (syncStatus.indexOf('Connected') !== -1 || syncStatus.indexOf('Pulled') !== -1)) {
+          pushToSheet();
+        }
       }
 
-      function computeMetrics(partyId) {
-        const ledger = state.mainLedger.filter(x => x.partyId === partyId);
-        const targets = state.upiTargets.filter(x => x.partyId === partyId);
-        const payouts = state.upiPayouts.filter(x => x.partyId === partyId);
-        const rec = ledger.filter(x => x.type === 'RECEIVED').reduce((s, x) => s + (Number(x.amount) || 0), 0);
-        const ret = ledger.filter(x => x.type === 'RETURNED').reduce((s, x) => s + (Number(x.amount) || 0), 0);
-        const openPaid = payouts.filter(x => x.status !== 'FINALIZED').reduce((s, x) => s + (Number(x.amount) || 0), 0);
-        const openTgt = targets.filter(x => x.status !== 'FINALIZED').reduce((s, x) => s + (Number(x.targetAmount) || 0), 0);
-        return { rec, ret, mainOS: rec - ret, openPaid, openTgt, netOS: (rec - ret) - openPaid, ledger, targets, payouts };
+      function finalizeOpenUpiBatch(partyId) {
+        const m = computePartyMetrics(partyId);
+        const openTargets = m.targets.filter(x => x.status !== 'FINALIZED');
+        const openPayouts = m.payouts.filter(x => x.status !== 'FINALIZED');
+        if (openPayouts.length === 0) {
+          alert('No open UPI payouts to finalize.');
+          return;
+        }
+        const batchId = 'BATCH_' + Date.now();
+        const today = new Date().toISOString().slice(0, 10);
+        const totalPaid = openPayouts.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+        const totalTarget = openTargets.reduce((s, x) => s + (Number(x.targetAmount) || 0), 0);
+
+        state.upiTargets.forEach(t => {
+          if (t.partyId === partyId && t.status !== 'FINALIZED') {
+            t.status = 'FINALIZED';
+            t.batchId = batchId;
+          }
+        });
+        state.upiPayouts.forEach(p => {
+          if (p.partyId === partyId && p.status !== 'FINALIZED') {
+            p.status = 'FINALIZED';
+            p.batchId = batchId;
+          }
+        });
+
+        state.mainLedger.unshift({
+          id: 'led_' + Date.now(),
+          partyId: partyId,
+          date: today,
+          type: 'RETURNED',
+          amount: totalPaid,
+          mode: 'UPI-BATCH',
+          ref: batchId,
+          notes: 'Finalized ' + openPayouts.length + ' UPI payouts',
+          batchId: batchId,
+          proofUrl: '',
+          updatedAt: new Date().toISOString()
+        });
+
+        state.finalizedBatches.unshift({
+          id: batchId,
+          partyId: partyId,
+          date: today,
+          message: 'Finalized ' + openPayouts.length + ' payouts',
+          totalPaid: totalPaid,
+          totalTarget: totalTarget,
+          variance: totalTarget - totalPaid,
+          payoutCount: openPayouts.length,
+          updatedAt: new Date().toISOString()
+        });
+
+        autoSyncIfConnected();
+        render();
+      }
+
+      function lockClosingOS(partyId) {
+        const m = computePartyMetrics(partyId);
+        const today = new Date().toISOString().slice(0, 10);
+        const note = prompt('Optional settlement / confirmation note:', 'Balance confirmed with party');
+        if (note === null) return;
+        state.settlements.unshift({
+          id: 'set_' + Date.now(),
+          partyId: partyId,
+          date: today,
+          closingOS: m.totalNetOS,
+          notes: note,
+          updatedAt: new Date().toISOString()
+        });
+        autoSyncIfConnected();
+        render();
+      }
+
+      function shareWhatsAppSummary(party, m) {
+        const lines = [
+          '*PARTY HISAB STATEMENT*',
+          '*Party:* ' + party.name,
+          '*Date:* ' + new Date().toLocaleDateString('en-IN'),
+          '------------------------',
+          'Total Received: ' + formatINR(m.totalReceived),
+          'Main Returned: ' + formatINR(m.mainReturned),
+          'Main Ledger O/S: ' + formatINR(m.mainLedgerOS),
+          'Open UPI Paid: ' + formatINR(m.openUpiPaid),
+          '*NET CLOSING O/S: ' + formatINR(m.totalNetOS) + '*',
+          '------------------------',
+          'Generated via Party Hisab Book'
+        ];
+        window.open('https://wa.me/?text=' + encodeURIComponent(lines.join('\n')), '_blank');
+      }
+
+      function exportJSONBackup() {
+        const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'Party_Hisab_Backup_' + new Date().toISOString().slice(0, 10) + '.json';
+        a.click();
       }
 
       function render() {
         const party = getActiveParty();
-        const m = computeMetrics(party.id);
+        const m = computePartyMetrics(party.id);
         const isDark = document.documentElement.classList.contains('dark');
-        const isOk = syncStatus.indexOf('Connected') !== -1 || syncStatus.indexOf('Pulled') !== -1;
+        const isConnected = syncStatus.indexOf('Connected') !== -1 || syncStatus.indexOf('Pulled') !== -1;
 
-        document.getElementById('app').innerHTML = `
+        const filteredLedger = m.ledger.filter(r => {
+          if (!ledgerFilter) return true;
+          const q = ledgerFilter.toLowerCase();
+          return (r.ref || '').toLowerCase().includes(q) ||
+                 (r.notes || '').toLowerCase().includes(q) ||
+                 (r.mode || '').toLowerCase().includes(q) ||
+                 String(r.amount).includes(q);
+        });
+
+        const filteredPayouts = m.payouts.filter(x => x.status !== 'FINALIZED').filter(p => {
+          if (!upiFilter) return true;
+          const q = upiFilter.toLowerCase();
+          return (p.recipientName || '').toLowerCase().includes(q) ||
+                 (p.utr || '').toLowerCase().includes(q) ||
+                 (p.appMode || '').toLowerCase().includes(q);
+        });
+
+        const root = document.getElementById('app');
+        root.innerHTML = `
+          <!-- Top Bar -->
           <header class="sticky top-0 z-30 border-b backdrop-blur-md no-print" style="background: var(--bg-header); border-color: var(--border-card);">
             <div class="max-w-5xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-2">
-              <div class="flex items-center gap-2">
-                <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-extrabold text-sm">HB</div>
-                <div><div class="font-bold text-sm">Party Hisab Book</div><div class="text-[11px]" style="color: var(--text-muted);">Zero-CORS Sync Edition</div></div>
+              <div class="flex items-center gap-2.5">
+                <!-- Colourful Gradient Ledger & Rupee Emblem Logo -->
+                <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-600 via-purple-600 to-emerald-500 p-0.5 shadow-md shrink-0">
+                  <div class="w-full h-full rounded-[14px] bg-slate-950/15 backdrop-blur-xs flex items-center justify-center relative">
+                    <svg class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                      <path d="M9 7h6M9 11h4"></path>
+                    </svg>
+                    <span class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-amber-400 text-slate-950 font-black text-[10px] flex items-center justify-center shadow">₹</span>
+                  </div>
+                </div>
+                <div>
+                  <div class="font-extrabold text-sm leading-tight bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500 bg-clip-text text-transparent">Party Hisab Book</div>
+                  <div class="text-[11px]" style="color: var(--text-muted);">Multi-Party Ledger & Proxy UPI</div>
+                </div>
               </div>
+
               <div class="flex flex-wrap items-center gap-2">
-                <select id="partySel" class="app-input rounded-xl px-3 py-1.5 text-xs font-semibold">
+                <select id="partySelector" class="app-input rounded-xl px-3 py-1.5 text-xs font-semibold">
                   ${state.parties.map(p => `<option value="${esc(p.id)}" ${p.id === party.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
                 </select>
-                <button id="btnNewParty" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-indigo-600 text-white">+ Party</button>
-                <button id="btnOpenSync" class="px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border ${isOk ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30' : 'bg-rose-500/15 text-rose-400 border-rose-500/30'}">
-                  <span class="w-2 h-2 rounded-full ${isOk ? 'bg-emerald-400' : 'bg-rose-400'}"></span>${esc(syncStatus)}
+                <button id="btnNewParty" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:opacity-95 shadow-xs">+ Party</button>
+                <button id="btnOpenSync" class="px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border ${isConnected ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30' : 'bg-rose-500/15 text-rose-400 border-rose-500/30'}">
+                  <span class="w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-rose-400'}"></span>
+                  ${esc(syncStatus)}
                 </button>
-                <button id="btnTheme" class="app-subtle px-2.5 py-1.5 rounded-xl text-xs font-semibold">${isDark ? '☀️ Day' : '🌙 Night'}</button>
+                <button id="btnToggleTheme" class="app-subtle px-2.5 py-1.5 rounded-xl text-xs font-semibold">
+                  ${isDark ? '☀️ Day' : '🌙 Night'}
+                </button>
               </div>
             </div>
           </header>
 
           <main class="max-w-5xl mx-auto px-4 pt-5 space-y-5">
-            <section class="app-card rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
+            <!-- Party Header Card -->
+            <section class="app-card rounded-2xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h1 class="text-lg font-extrabold">${esc(party.name)}</h1>
-                <p class="text-xs" style="color: var(--text-muted);">${esc(party.city || '')} • ${esc(party.phone || '')}</p>
+                <div class="flex items-center gap-2">
+                  <h1 class="text-lg sm:text-xl font-extrabold">${esc(party.name)}</h1>
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-500">Active Ledger</span>
+                </div>
+                <p class="text-xs mt-1" style="color: var(--text-muted);">${esc(party.city || 'City N/A')} • ${esc(party.phone || 'Phone N/A')}</p>
               </div>
-              <div class="flex gap-2 no-print">
-                <button onclick="window.print()" class="app-subtle px-3 py-2 rounded-xl text-xs font-semibold">🖨️ Print</button>
-                <button id="btnLock" class="px-3 py-2 rounded-xl text-xs font-semibold bg-amber-500/15 text-amber-500 border border-amber-500/30">🔒 Lock O/S</button>
+              <div class="flex flex-wrap gap-2 no-print">
+                <button id="btnWhatsApp" class="px-3 py-2 rounded-xl text-xs font-semibold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">💬 WhatsApp</button>
+                <button id="btnStatementToggle" class="app-subtle px-3 py-2 rounded-xl text-xs font-semibold ${state.statementMode ? 'ring-2 ring-indigo-500' : ''}">
+                  📄 ${state.statementMode ? 'Exit Statement' : 'Statement View'}
+                </button>
+                <button id="btnPrint" class="app-subtle px-3 py-2 rounded-xl text-xs font-semibold">🖨️ Print / A4 PDF</button>
+                <button id="btnLockOS" class="px-3 py-2 rounded-xl text-xs font-semibold bg-amber-500/15 text-amber-500 border border-amber-500/30">🔒 Lock Closing O/S</button>
               </div>
             </section>
 
+            <!-- 4 Colourful KPI Cards -->
             <section class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <div class="app-card rounded-2xl p-4"><div class="text-[11px] font-semibold uppercase" style="color:var(--text-muted)">Received</div><div class="text-lg font-extrabold text-emerald-500 tabular-nums mt-1">${formatINR(m.rec)}</div></div>
-              <div class="app-card rounded-2xl p-4"><div class="text-[11px] font-semibold uppercase" style="color:var(--text-muted)">Returned</div><div class="text-lg font-extrabold text-sky-500 tabular-nums mt-1">${formatINR(m.ret)}</div></div>
-              <div class="app-card rounded-2xl p-4"><div class="text-[11px] font-semibold uppercase" style="color:var(--text-muted)">Main O/S</div><div class="text-lg font-extrabold tabular-nums mt-1">${formatINR(m.mainOS)}</div></div>
-              <div class="app-card rounded-2xl p-4 border-indigo-500/40"><div class="text-[11px] font-semibold uppercase text-indigo-400">Net O/S</div><div class="text-lg font-extrabold text-indigo-500 tabular-nums mt-1">${formatINR(m.netOS)}</div></div>
+              <div class="app-card rounded-2xl p-4 border-l-4 border-l-emerald-500">
+                <div class="text-[11px] font-semibold uppercase" style="color: var(--text-muted);">Total Received</div>
+                <div class="text-lg sm:text-xl font-extrabold text-emerald-500 tabular-nums mt-1">${formatINR(m.totalReceived)}</div>
+                <div class="text-[11px] mt-1" style="color: var(--text-muted);">Bank / Cash Inward</div>
+              </div>
+              <div class="app-card rounded-2xl p-4 border-l-4 border-l-sky-500">
+                <div class="text-[11px] font-semibold uppercase" style="color: var(--text-muted);">Main Returned</div>
+                <div class="text-lg sm:text-xl font-extrabold text-sky-500 tabular-nums mt-1">${formatINR(m.mainReturned)}</div>
+                <div class="text-[11px] mt-1" style="color: var(--text-muted);">Direct + Finalized UPI</div>
+              </div>
+              <div class="app-card rounded-2xl p-4 border-l-4 border-l-amber-500">
+                <div class="text-[11px] font-semibold uppercase" style="color: var(--text-muted);">O/S (Excl. Open UPI)</div>
+                <div class="text-lg sm:text-xl font-extrabold text-amber-500 tabular-nums mt-1">${formatINR(m.mainLedgerOS)}</div>
+                <div class="text-[11px] mt-1" style="color: var(--text-muted);">Main Ledger O/S</div>
+              </div>
+              <div class="app-card rounded-2xl p-4 border-l-4 border-l-indigo-500 bg-gradient-to-br from-indigo-500/5 to-purple-500/5">
+                <div class="text-[11px] font-semibold uppercase text-indigo-400">Total Net O/S</div>
+                <div class="text-lg sm:text-xl font-extrabold text-indigo-500 tabular-nums mt-1">${formatINR(m.totalNetOS)}</div>
+                <div class="text-[11px] mt-1" style="color: var(--text-muted);">After Open UPI (${formatINR(m.openUpiPaid)})</div>
+              </div>
             </section>
 
-            <div class="flex gap-2 no-print">
-              ${['ledger', 'upi', 'batches'].map((t, i) => `<button data-tab="${t}" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold ${state.activeTab === t ? 'bg-indigo-600 text-white' : 'app-card'}">${['1. Main Ledger', '2. Proxy UPI', '3. Batches & Locks'][i]}</button>`).join('')}
-            </div>
+            ${state.statementMode ? `
+              <!-- A4 Consolidated Statement View -->
+              <section class="app-card rounded-2xl p-5 space-y-4">
+                <div class="flex items-center justify-between border-b pb-3" style="border-color: var(--border-card);">
+                  <div>
+                    <h2 class="text-base font-extrabold">Consolidated Party Account Statement</h2>
+                    <p class="text-xs" style="color: var(--text-muted);">Generated on ${new Date().toLocaleDateString('en-IN')} • Includes Main Ledger & Open Proxy UPI</p>
+                  </div>
+                  <div class="text-right text-xs">
+                    <div class="font-bold">Closing Net Payable: <span class="text-indigo-500 text-sm">${formatINR(m.totalNetOS)}</span></div>
+                  </div>
+                </div>
 
-            ${state.activeTab === 'ledger' ? `
-              <section class="app-card rounded-2xl p-4 space-y-4">
-                <form id="formLedger" class="grid grid-cols-1 sm:grid-cols-6 gap-2 no-print">
-                  <input type="date" name="date" required value="${new Date().toISOString().slice(0,10)}" class="app-input rounded-xl px-3 py-2 text-xs" />
-                  <select name="type" class="app-input rounded-xl px-3 py-2 text-xs font-semibold"><option value="RECEIVED">RECEIVED (+)</option><option value="RETURNED">RETURNED (-)</option></select>
-                  <input type="number" name="amount" required min="1" step="any" placeholder="Amount ₹" class="app-input rounded-xl px-3 py-2 text-xs" />
-                  <select name="mode" class="app-input rounded-xl px-3 py-2 text-xs"><option>RTGS</option><option>NEFT</option><option>IMPS</option><option>CASH</option></select>
-                  <input type="text" name="ref" placeholder="Ref / UTR" class="app-input rounded-xl px-3 py-2 text-xs" />
-                  <button type="submit" class="bg-indigo-600 text-white font-bold rounded-xl px-4 py-2 text-xs">+ Add</button>
-                  <input type="text" name="notes" placeholder="Notes (optional)" class="app-input rounded-xl px-3 py-2 text-xs sm:col-span-6" />
-                </form>
-                <div class="overflow-x-auto">
-                  <table class="w-full text-left text-xs">
-                    <thead><tr class="border-b" style="border-color:var(--border-card);color:var(--text-muted)"><th class="py-2">Date</th><th>Type</th><th>Mode/Ref</th><th>Notes</th><th class="text-right">Amount</th><th class="text-right no-print">Del</th></tr></thead>
+                <div>
+                  <h3 class="text-xs font-bold uppercase mb-2" style="color: var(--text-muted);">A. Main Ledger Entries</h3>
+                  <table class="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr class="border-b" style="border-color: var(--border-card); color: var(--text-muted);">
+                        <th class="py-2">Date</th>
+                        <th class="py-2">Type</th>
+                        <th class="py-2">Mode / Ref</th>
+                        <th class="py-2">Notes</th>
+                        <th class="py-2 text-right">Amount</th>
+                      </tr>
+                    </thead>
                     <tbody>
                       ${m.ledger.map(r => `
-                        <tr class="border-b" style="border-color:var(--border-subtle)">
+                        <tr class="border-b" style="border-color: var(--border-subtle);">
                           <td class="py-2">${esc(r.date)}</td>
-                          <td><span class="px-2 py-0.5 rounded text-[10px] font-bold ${r.type==='RECEIVED'?'bg-emerald-500/15 text-emerald-500':'bg-sky-500/15 text-sky-500'}">${esc(r.type)}</span></td>
-                          <td>${esc(r.mode)} ${r.ref?'• '+esc(r.ref):''}</td>
-                          <td>${esc(r.notes)}</td>
-                          <td class="text-right font-bold tabular-nums ${r.type==='RECEIVED'?'text-emerald-500':'text-sky-500'}">${r.type==='RECEIVED'?'+':'-'}${formatINR(r.amount)}</td>
-                          <td class="text-right no-print"><button data-del-led="${esc(r.id)}" class="text-rose-400">✕</button></td>
-                        </tr>`).join('') || '<tr><td colspan="6" class="py-4 text-center" style="color:var(--text-muted)">No entries</td></tr>'}
+                          <td class="py-2 font-bold">${esc(r.type)}</td>
+                          <td class="py-2">${esc(r.mode)} ${r.ref ? '• ' + esc(r.ref) : ''}</td>
+                          <td class="py-2">${esc(r.notes)}</td>
+                          <td class="py-2 text-right font-bold tabular-nums">${r.type === 'RECEIVED' ? '+' : '-'}${formatINR(r.amount)}</td>
+                        </tr>
+                      `).join('') || '<tr><td colspan="5" class="py-3 text-center">No ledger entries</td></tr>'}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div>
+                  <h3 class="text-xs font-bold uppercase mb-2" style="color: var(--text-muted);">B. Unfinalized (Open) Proxy UPI Payouts</h3>
+                  <table class="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr class="border-b" style="border-color: var(--border-card); color: var(--text-muted);">
+                        <th class="py-2">Date</th>
+                        <th class="py-2">Recipient</th>
+                        <th class="py-2">Mode / UTR</th>
+                        <th class="py-2 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${m.payouts.filter(x => x.status !== 'FINALIZED').map(p => `
+                        <tr class="border-b" style="border-color: var(--border-subtle);">
+                          <td class="py-2">${esc(p.date)}</td>
+                          <td class="py-2 font-semibold">${esc(p.recipientName)}</td>
+                          <td class="py-2">${esc(p.appMode)} • ${esc(p.utr)}</td>
+                          <td class="py-2 text-right font-bold tabular-nums">-${formatINR(p.amount)}</td>
+                        </tr>
+                      `).join('') || '<tr><td colspan="4" class="py-3 text-center">No open UPI payouts</td></tr>'}
                     </tbody>
                   </table>
                 </div>
               </section>
-            ` : ''}
-
-            ${state.activeTab === 'upi' ? `
-              <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <section class="app-card rounded-2xl p-4 space-y-3">
-                  <div class="flex justify-between"><h2 class="text-sm font-bold">UPI Instructions</h2><span class="text-xs font-bold text-indigo-400">${formatINR(m.openTgt)}</span></div>
-                  <form id="formTarget" class="grid grid-cols-2 gap-2 no-print">
-                    <input name="payeeName" required placeholder="Payee Name" class="app-input rounded-xl px-3 py-2 text-xs" />
-                    <input name="upiId" required placeholder="UPI ID" class="app-input rounded-xl px-3 py-2 text-xs" />
-                    <input type="number" name="targetAmount" required placeholder="Target ₹" class="app-input rounded-xl px-3 py-2 text-xs" />
-                    <input name="notes" placeholder="Note" class="app-input rounded-xl px-3 py-2 text-xs" />
-                    <button type="submit" class="col-span-2 bg-indigo-600 text-white font-bold rounded-xl py-2 text-xs">+ Add Instruction</button>
-                  </form>
-                  ${m.targets.filter(x=>x.status!=='FINALIZED').map(t => `<div class="app-subtle rounded-xl p-2.5 flex justify-between text-xs"><div><b>${esc(t.payeeName)}</b> (${esc(t.upiId)})</div><div class="font-bold">${formatINR(t.targetAmount)} <button data-del-tgt="${esc(t.id)}" class="text-rose-400 ml-2">✕</button></div></div>`).join('')}
-                </section>
-                <section class="app-card rounded-2xl p-4 space-y-3">
-                  <div class="flex justify-between"><h2 class="text-sm font-bold">UPI Payouts Sent</h2><button id="btnFin" class="px-3 py-1 rounded-xl text-xs font-bold bg-emerald-600 text-white no-print">Finalize (${formatINR(m.openPaid)})</button></div>
-                  <form id="formPayout" class="grid grid-cols-2 gap-2 no-print">
-                    <input name="recipientName" required placeholder="Recipient Name" class="app-input rounded-xl px-3 py-2 text-xs" />
-                    <input type="number" name="amount" required placeholder="Amount ₹" class="app-input rounded-xl px-3 py-2 text-xs" />
-                    <input name="utr" required placeholder="UTR No." class="app-input rounded-xl px-3 py-2 text-xs" />
-                    <select name="appMode" class="app-input rounded-xl px-3 py-2 text-xs"><option>GPay</option><option>PhonePe</option><option>Paytm</option></select>
-                    <button type="submit" class="col-span-2 bg-sky-600 text-white font-bold rounded-xl py-2 text-xs">+ Record Payout</button>
-                  </form>
-                  ${m.payouts.filter(x=>x.status!=='FINALIZED').map(p => `<div class="app-subtle rounded-xl p-2.5 flex justify-between text-xs"><div><b>${esc(p.recipientName)}</b> • UTR: ${esc(p.utr)}</div><div class="font-bold text-sky-500">${formatINR(p.amount)} <button data-del-pay="${esc(p.id)}" class="text-rose-400 ml-2">✕</button></div></div>`).join('')}
-                </section>
+            ` : `
+              <!-- Navigation Tabs -->
+              <div class="flex flex-wrap items-center justify-between gap-2 no-print">
+                <div class="flex flex-wrap gap-2">
+                  ${[
+                    { id: 'ledger', label: '1. Main Ledger (' + m.ledger.length + ')' },
+                    { id: 'upi', label: '2. Proxy UPI Workspace (' + m.payouts.filter(x => x.status !== 'FINALIZED').length + ' Open)' },
+                    { id: 'batches', label: '3. Finalized Batches & Locks (' + (state.finalizedBatches.filter(x => x.partyId === party.id).length + state.settlements.filter(x => x.partyId === party.id).length) + ')' }
+                  ].map(t => `
+                    <button data-tab="${t.id}" class="tab-btn px-4 py-2 rounded-xl text-xs font-bold transition ${state.activeTab === t.id ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow' : 'app-card'}">
+                      ${t.label}
+                    </button>
+                  `).join('')}
+                </div>
+                <button id="btnBackupJson" class="app-subtle px-3 py-1.5 rounded-xl text-[11px] font-semibold">⬇️ Backup JSON</button>
               </div>
-            ` : ''}
 
-            ${state.activeTab === 'batches' ? `
-              <section class="app-card rounded-2xl p-4 space-y-3 text-xs">
-                <h2 class="text-sm font-bold">Finalized Batches & O/S Locks</h2>
-                ${state.finalizedBatches.filter(b=>b.partyId===party.id).map(b => `<div class="app-subtle p-3 rounded-xl flex justify-between"><div><b>${esc(b.id)}</b> (${esc(b.date)})</div><div class="font-bold text-emerald-500">${formatINR(b.totalPaid)}</div></div>`).join('') || '<div style="color:var(--text-muted)">No batches</div>'}
-                ${state.settlements.filter(s=>s.partyId===party.id).map(s => `<div class="app-subtle p-3 rounded-xl flex justify-between"><div>🔒 Locked on ${esc(s.date)} — ${esc(s.notes)}</div><div class="font-bold">${formatINR(s.closingOS)}</div></div>`).join('')}
-              </section>
-            ` : ''}
+              <!-- Tab 1: Main Ledger -->
+              ${state.activeTab === 'ledger' ? `
+                <section class="app-card rounded-2xl p-4 sm:p-5 space-y-4">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <h2 class="text-sm font-bold">Add Main Ledger Entry (Inward / Direct Return)</h2>
+                    <input id="inpSearchLedger" type="text" value="${esc(ledgerFilter)}" placeholder="🔍 Filter Ref, Notes, Amount..." class="app-input rounded-xl px-3 py-1.5 text-xs w-56 no-print" />
+                  </div>
+                  <form id="formLedger" class="grid grid-cols-1 sm:grid-cols-6 gap-2.5 no-print">
+                    <input type="date" name="date" required value="${new Date().toISOString().slice(0, 10)}" class="app-input rounded-xl px-3 py-2 text-xs" />
+                    <select name="type" class="app-input rounded-xl px-3 py-2 text-xs font-semibold">
+                      <option value="RECEIVED">RECEIVED (+ Inward)</option>
+                      <option value="RETURNED">RETURNED (- Outward)</option>
+                    </select>
+                    <input type="number" name="amount" required min="1" step="any" placeholder="Amount ₹" class="app-input rounded-xl px-3 py-2 text-xs" />
+                    <select name="mode" class="app-input rounded-xl px-3 py-2 text-xs">
+                      <option value="RTGS">RTGS</option>
+                      <option value="NEFT">NEFT</option>
+                      <option value="IMPS">IMPS</option>
+                      <option value="CASH">CASH</option>
+                      <option value="CHEQUE">CHEQUE</option>
+                    </select>
+                    <input type="text" name="ref" placeholder="UTR / Ref No." class="app-input rounded-xl px-3 py-2 text-xs" />
+                    <button type="submit" class="bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-95 text-white font-bold rounded-xl px-4 py-2 text-xs">+ Add Entry</button>
+                    <input type="text" name="notes" placeholder="Notes / Remarks (optional)" class="app-input rounded-xl px-3 py-2 text-xs sm:col-span-4" />
+                    <label class="app-input rounded-xl px-3 py-2 text-xs sm:col-span-2 flex items-center justify-between cursor-pointer">
+                      <span class="truncate" style="color: var(--text-muted);">📎 Attach Slip (Optional)</span>
+                      <input type="file" name="proofFile" accept="image/*" class="hidden" onchange="this.previousElementSibling.textContent = this.files[0] ? '✅ ' + this.files[0].name : '📎 Attach Slip (Optional)'" />
+                    </label>
+                  </form>
+
+                  <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr class="border-b" style="border-color: var(--border-card); color: var(--text-muted);">
+                          <th class="py-2.5 px-2">Date</th>
+                          <th class="py-2.5 px-2">Type</th>
+                          <th class="py-2.5 px-2">Mode / Ref</th>
+                          <th class="py-2.5 px-2">Notes</th>
+                          <th class="py-2.5 px-2 text-right">Amount</th>
+                          <th class="py-2.5 px-2 text-right no-print">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${filteredLedger.length === 0 ? `<tr><td colspan="6" class="py-6 text-center" style="color: var(--text-muted);">No matching ledger entries.</td></tr>` : filteredLedger.map(row => `
+                          <tr class="border-b" style="border-color: var(--border-subtle);">
+                            <td class="py-2.5 px-2 whitespace-nowrap">${esc(row.date)}</td>
+                            <td class="py-2.5 px-2">
+                              <span class="px-2 py-0.5 rounded-md text-[10px] font-bold ${row.type === 'RECEIVED' ? 'bg-emerald-500/15 text-emerald-500' : 'bg-sky-500/15 text-sky-500'}">
+                                ${esc(row.type)}
+                              </span>
+                            </td>
+                            <td class="py-2.5 px-2">${esc(row.mode)} ${row.ref ? '• ' + esc(row.ref) : ''}</td>
+                            <td class="py-2.5 px-2" style="color: var(--text-secondary);">
+                              ${esc(row.notes)}
+                              ${row.proofUrl ? `<button data-view-proof="${esc(row.proofUrl)}" class="ml-1.5 text-indigo-400 underline text-[11px] no-print">View Slip</button>` : ''}
+                            </td>
+                            <td class="py-2.5 px-2 text-right font-bold tabular-nums ${row.type === 'RECEIVED' ? 'text-emerald-500' : 'text-sky-500'}">
+                              ${row.type === 'RECEIVED' ? '+' : '-'}${formatINR(row.amount)}
+                            </td>
+                            <td class="py-2.5 px-2 text-right no-print">
+                              <button data-del-ledger="${esc(row.id)}" class="text-rose-400 hover:underline text-[11px]">Delete</button>
+                            </td>
+                          </tr>
+                        `).join('')}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              ` : ''}
+
+              <!-- Tab 2: Proxy UPI Workspace -->
+              ${state.activeTab === 'upi' ? `
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <!-- UPI Targets -->
+                  <section class="app-card rounded-2xl p-4 space-y-3">
+                    <div class="flex items-center justify-between">
+                      <h2 class="text-sm font-bold">Party UPI Payment Instructions (Targets)</h2>
+                      <span class="text-xs font-bold text-indigo-400 tabular-nums">Target: ${formatINR(m.openUpiTarget)}</span>
+                    </div>
+                    <form id="formTarget" class="grid grid-cols-1 sm:grid-cols-2 gap-2 no-print">
+                      <input type="text" name="payeeName" required placeholder="Payee Name" class="app-input rounded-xl px-3 py-2 text-xs" />
+                      <input type="text" name="upiId" required placeholder="UPI ID (e.g. name@okaxis)" class="app-input rounded-xl px-3 py-2 text-xs" />
+                      <input type="number" name="targetAmount" required min="1" step="any" placeholder="Target Amount ₹" class="app-input rounded-xl px-3 py-2 text-xs" />
+                      <input type="text" name="notes" placeholder="Note (optional)" class="app-input rounded-xl px-3 py-2 text-xs" />
+                      <button type="submit" class="sm:col-span-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-95 text-white font-bold rounded-xl py-2 text-xs">+ Add UPI Instruction</button>
+                    </form>
+
+                    <div class="space-y-2 pt-2">
+                      ${m.targets.filter(x => x.status !== 'FINALIZED').map(t => {
+                        const paidForTarget = m.payouts
+                          .filter(p => p.status !== 'FINALIZED' && p.allocatedTargetId === t.id)
+                          .reduce((s, p) => s + (Number(p.amount) || 0), 0);
+                        const rem = (Number(t.targetAmount) || 0) - paidForTarget;
+                        return `
+                          <div class="app-subtle rounded-xl p-3 flex items-center justify-between gap-2 text-xs">
+                            <div>
+                              <div class="font-bold">${esc(t.payeeName)} <span class="font-normal" style="color: var(--text-muted);">(${esc(t.upiId)})</span></div>
+                              <div class="text-[11px] mt-0.5" style="color: var(--text-muted);">Paid: ${formatINR(paidForTarget)} • Remaining: <strong class="${rem <= 0 ? 'text-emerald-500' : 'text-amber-500'}">${formatINR(rem)}</strong></div>
+                            </div>
+                            <div class="text-right">
+                              <div class="font-extrabold tabular-nums">${formatINR(t.targetAmount)}</div>
+                              <button data-del-target="${esc(t.id)}" class="text-rose-400 text-[11px] hover:underline no-print">Remove</button>
+                            </div>
+                          </div>
+                        `;
+                      }).join('') || `<div class="text-xs py-4 text-center" style="color: var(--text-muted);">No open UPI instructions.</div>`}
+                    </div>
+                  </section>
+
+                  <!-- Actual UPI Payouts -->
+                  <section class="app-card rounded-2xl p-4 space-y-3">
+                    <div class="flex items-center justify-between gap-2">
+                      <h2 class="text-sm font-bold">Actual UPI Payouts Sent</h2>
+                      <button id="btnFinalizeBatch" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:opacity-95 text-white no-print">
+                        Finalize Batch (${formatINR(m.openUpiPaid)})
+                      </button>
+                    </div>
+                    <form id="formPayout" class="grid grid-cols-1 sm:grid-cols-2 gap-2 no-print">
+                      <select id="selAllocTarget" name="allocatedTargetId" class="app-input rounded-xl px-3 py-2 text-xs sm:col-span-2">
+                        <option value="">-- Allocate to UPI Instruction (Optional) --</option>
+                        ${m.targets.filter(x => x.status !== 'FINALIZED').map(t => `<option value="${esc(t.id)}" data-payee="${esc(t.payeeName)}">${esc(t.payeeName)} (${formatINR(t.targetAmount)})</option>`).join('')}
+                      </select>
+                      <input id="inpRecipient" type="text" name="recipientName" required placeholder="Recipient Name" class="app-input rounded-xl px-3 py-2 text-xs" />
+                      <input type="number" name="amount" required min="1" step="any" placeholder="Paid Amount ₹" class="app-input rounded-xl px-3 py-2 text-xs" />
+                      <input type="text" name="utr" required placeholder="12-digit UPI UTR" class="app-input rounded-xl px-3 py-2 text-xs" />
+                      <select name="appMode" class="app-input rounded-xl px-3 py-2 text-xs">
+                        <option value="GPay">GPay</option>
+                        <option value="PhonePe">PhonePe</option>
+                        <option value="Paytm">Paytm</option>
+                        <option value="Bank UPI">Bank UPI</option>
+                      </select>
+                      <label class="app-input rounded-xl px-3 py-2 text-xs sm:col-span-2 flex items-center justify-between cursor-pointer">
+                        <span class="truncate" style="color: var(--text-muted);">📎 Attach UPI Screenshot (Optional)</span>
+                        <input type="file" name="proofFile" accept="image/*" class="hidden" onchange="this.previousElementSibling.textContent = this.files[0] ? '✅ ' + this.files[0].name : '📎 Attach UPI Screenshot (Optional)'" />
+                      </label>
+                      <button type="submit" class="sm:col-span-2 bg-gradient-to-r from-sky-600 to-indigo-600 hover:opacity-95 text-white font-bold rounded-xl py-2 text-xs">+ Record UPI Payout</button>
+                    </form>
+
+                    <div class="pt-1 no-print">
+                      <input id="inpSearchUpi" type="text" value="${esc(upiFilter)}" placeholder="🔍 Search Recipient or UTR..." class="app-input w-full rounded-xl px-3 py-1.5 text-xs" />
+                    </div>
+
+                    <div class="space-y-2 pt-1">
+                      ${filteredPayouts.map(p => `
+                        <div class="app-subtle rounded-xl p-3 flex items-center justify-between gap-2 text-xs">
+                          <div>
+                            <div class="font-bold">${esc(p.recipientName)} <span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-400">${esc(p.appMode)}</span></div>
+                            <div class="text-[11px] mt-0.5" style="color: var(--text-muted);">
+                              ${esc(p.date)} • UTR: ${esc(p.utr)}
+                              ${p.proofUrl ? `<button data-view-proof="${esc(p.proofUrl)}" class="ml-1.5 text-indigo-400 underline no-print">Screenshot</button>` : ''}
+                            </div>
+                          </div>
+                          <div class="text-right">
+                            <div class="font-extrabold text-sky-500 tabular-nums">${formatINR(p.amount)}</div>
+                            <button data-del-payout="${esc(p.id)}" class="text-rose-400 text-[11px] hover:underline no-print">Delete</button>
+                          </div>
+                        </div>
+                      `).join('') || `<div class="text-xs py-4 text-center" style="color: var(--text-muted);">No open UPI payouts recorded yet.</div>`}
+                    </div>
+                  </section>
+                </div>
+              ` : ''}
+
+              <!-- Tab 3: Finalized Batches & Settlement Locks -->
+              ${state.activeTab === 'batches' ? `
+                <section class="app-card rounded-2xl p-4 sm:p-5 space-y-4">
+                  <h2 class="text-sm font-bold">Finalized UPI Batches & Closing O/S Locks</h2>
+                  <div class="space-y-2">
+                    ${state.finalizedBatches.filter(b => b.partyId === party.id).map(b => `
+                      <div class="app-subtle rounded-xl p-3 flex items-center justify-between text-xs">
+                        <div>
+                          <div class="font-bold">${esc(b.id)} • ${esc(b.date)}</div>
+                          <div class="text-[11px]" style="color: var(--text-muted);">${esc(b.message)} (Target: ${formatINR(b.totalTarget)} • Variance: ${formatINR(b.variance)})</div>
+                        </div>
+                        <div class="font-extrabold text-emerald-500 tabular-nums">${formatINR(b.totalPaid)}</div>
+                      </div>
+                    `).join('') || `<div class="text-xs" style="color: var(--text-muted);">No finalized UPI batches yet.</div>`}
+                  </div>
+
+                  <hr style="border-color: var(--border-card);" />
+
+                  <div class="space-y-2">
+                    ${state.settlements.filter(s => s.partyId === party.id).map(s => `
+                      <div class="app-subtle rounded-xl p-3 flex items-center justify-between text-xs">
+                        <div>
+                          <div class="font-bold text-amber-500">🔒 Closing O/S Locked on ${esc(s.date)}</div>
+                          <div class="text-[11px]" style="color: var(--text-muted);">${esc(s.notes)}</div>
+                        </div>
+                        <div class="font-extrabold tabular-nums">${formatINR(s.closingOS)}</div>
+                      </div>
+                    `).join('') || `<div class="text-xs" style="color: var(--text-muted);">No closing balance locks recorded yet.</div>`}
+                  </div>
+                </section>
+              ` : ''}
+            `}
           </main>
 
+          <!-- Google Sheets Sync Modal -->
           ${isSyncModalOpen ? `
-            <div class="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 no-print">
+            <div class="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 no-print">
               <div class="app-card rounded-2xl max-w-md w-full overflow-hidden shadow-2xl">
-                <div class="bg-emerald-600 p-4 text-white flex justify-between items-center">
-                  <div><h3 class="font-extrabold text-sm">Google Sheets Sync (Zero-CORS)</h3><p class="text-[11px] text-emerald-100">Works on GitHub Pages, Local Files & Mobile</p></div>
-                  <button id="btnCloseSync" class="font-bold text-lg">✕</button>
-                </div>
-                <div class="p-4 space-y-3">
-                  <div class="app-subtle rounded-xl p-3 flex justify-between text-xs">
-                    <span class="font-bold ${isOk ? 'text-emerald-500' : 'text-rose-400'}">${esc(syncStatus)}</span>
-                    <span style="color:var(--text-muted)">${esc(lastSyncTime)}</span>
+                <div class="bg-gradient-to-r from-emerald-600 to-teal-600 p-4 text-white flex items-start justify-between">
+                  <div>
+                    <h3 class="font-extrabold text-base">Google Sheets & Drive Two-Way Sync</h3>
+                    <p class="text-xs text-emerald-100 mt-0.5">Auto-syncs Parties, Main Ledger, UPI Targets & Payouts</p>
                   </div>
-                  <input id="inputUrl" type="url" value="${esc(syncUrl)}" placeholder="https://script.google.com/macros/s/.../exec" class="app-input w-full rounded-xl px-3 py-2 text-xs" />
-                  <div class="grid grid-cols-2 gap-2">
-                    <button id="btnTest" ${isSyncing?'disabled':''} class="bg-emerald-600 text-white font-bold rounded-xl py-2.5 text-xs">${isSyncing?'Working...':'Test & Connect'}</button>
-                    <button id="btnPush" ${isSyncing?'disabled':''} class="bg-sky-600 text-white font-bold rounded-xl py-2.5 text-xs">Push Local → Sheet</button>
-                    <button id="btnPull" ${isSyncing?'disabled':''} class="bg-indigo-600 text-white font-bold rounded-xl py-2.5 text-xs">Pull Latest ← Sheet</button>
-                    <button id="btnDisc" class="bg-rose-500/15 text-rose-400 font-bold rounded-xl py-2.5 text-xs">Disconnect</button>
+                  <button id="btnCloseSync" class="text-white/80 hover:text-white text-lg font-bold px-1">✕</button>
+                </div>
+
+                <div class="p-4 space-y-3">
+                  <div class="app-subtle rounded-xl p-3 flex items-center justify-between text-xs">
+                    <div class="flex items-center gap-2 font-bold ${isConnected ? 'text-emerald-500' : 'text-rose-400'}">
+                      <span class="w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-rose-500'}"></span>
+                      ${esc(syncStatus)}
+                    </div>
+                    <div class="text-[11px]" style="color: var(--text-muted);">${esc(lastSyncTime)}</div>
+                  </div>
+
+                  ${syncErrorDetail ? `
+                    <div class="rounded-xl p-2.5 text-[11px] bg-rose-500/10 border border-rose-500/30 text-rose-400 break-words">
+                      <strong>Detail:</strong> ${esc(syncErrorDetail)}
+                    </div>
+                  ` : ''}
+
+                  <div>
+                    <label class="block text-xs font-bold mb-1">Google Apps Script Web App URL *</label>
+                    <input id="inputSyncUrl" type="url" value="${esc(syncUrl)}" placeholder="https://script.google.com/macros/s/.../exec" class="app-input w-full rounded-xl px-3 py-2 text-xs" />
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-2 pt-1">
+                    <button id="btnTestConnect" ${isSyncing ? 'disabled' : ''} class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl py-2.5 text-xs">
+                      ${isSyncing ? 'Working...' : 'Test & Connect'}
+                    </button>
+                    <button id="btnPushSheet" ${isSyncing ? 'disabled' : ''} class="bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl py-2.5 text-xs">
+                      Push Local Data → Sheet
+                    </button>
+                    <button id="btnPullSheet" ${isSyncing ? 'disabled' : ''} class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl py-2.5 text-xs">
+                      Pull Latest ← Sheet
+                    </button>
+                    <button id="btnDisconnect" class="bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 font-bold rounded-xl py-2.5 text-xs">
+                      Disconnect
+                    </button>
                   </div>
                 </div>
               </div>
             </div>
           ` : ''}
 
+          <!-- Add Party Modal -->
           ${isAddPartyModalOpen ? `
-            <div class="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 no-print">
-              <div class="app-card rounded-2xl max-w-sm w-full p-4 space-y-3">
-                <div class="flex justify-between"><h3 class="font-bold text-sm">New Party</h3><button id="btnCloseParty">✕</button></div>
-                <form id="formParty" class="space-y-2">
-                  <input name="name" required placeholder="Party Name *" class="app-input w-full rounded-xl px-3 py-2 text-xs" />
-                  <input name="city" placeholder="City" class="app-input w-full rounded-xl px-3 py-2 text-xs" />
-                  <input name="phone" placeholder="Phone" class="app-input w-full rounded-xl px-3 py-2 text-xs" />
-                  <button type="submit" class="w-full bg-indigo-600 text-white font-bold rounded-xl py-2 text-xs">Save Party</button>
+            <div class="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 no-print">
+              <div class="app-card rounded-2xl max-w-sm w-full p-5 space-y-3">
+                <div class="flex items-center justify-between">
+                  <h3 class="font-extrabold text-sm">Add New Party Account</h3>
+                  <button id="btnClosePartyModal" class="text-sm font-bold">✕</button>
+                </div>
+                <form id="formNewParty" class="space-y-2.5">
+                  <input type="text" name="name" required placeholder="Party / Firm Name *" class="app-input w-full rounded-xl px-3 py-2 text-xs" />
+                  <input type="text" name="city" placeholder="City" class="app-input w-full rounded-xl px-3 py-2 text-xs" />
+                  <input type="text" name="phone" placeholder="Phone Number" class="app-input w-full rounded-xl px-3 py-2 text-xs" />
+                  <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl py-2.5 text-xs">Create Party Ledger</button>
                 </form>
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- Proof Image Viewer Modal -->
+          ${previewImageUrl ? `
+            <div class="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 no-print">
+              <div class="app-card rounded-2xl max-w-lg w-full p-4 space-y-3">
+                <div class="flex items-center justify-between">
+                  <h3 class="font-bold text-sm">Payment Proof / Screenshot</h3>
+                  <button id="btnCloseProof" class="text-sm font-bold">✕</button>
+                </div>
+                ${previewImageUrl.indexOf('data:image/') === 0
+                  ? `<img src="${esc(previewImageUrl)}" class="w-full max-h-[70vh] object-contain rounded-xl" />`
+                  : `<div class="p-4 text-center space-y-2"><p class="text-xs">Stored securely in Google Drive:</p><a href="${esc(previewImageUrl)}" target="_blank" class="inline-block px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold">Open in Google Drive</a></div>`
+                }
               </div>
             </div>
           ` : ''}
         `;
 
-        // Event bindings
-        document.getElementById('partySel').onchange = e => { state.activePartyId = e.target.value; saveLocal(); render(); };
-        document.getElementById('btnTheme').onclick = () => { const d = document.documentElement.classList.toggle('dark'); localStorage.setItem(THEME_KEY, d?'dark':'light'); render(); };
-        document.getElementById('btnOpenSync').onclick = () => { isSyncModalOpen = true; render(); };
-        if (document.getElementById('btnCloseSync')) document.getElementById('btnCloseSync').onclick = () => { isSyncModalOpen = false; render(); };
-        if (document.getElementById('inputUrl')) document.getElementById('inputUrl').oninput = e => { syncUrl = e.target.value; };
-        if (document.getElementById('btnTest')) document.getElementById('btnTest').onclick = testConnection;
-        if (document.getElementById('btnPush')) document.getElementById('btnPush').onclick = pushToSheet;
-        if (document.getElementById('btnPull')) document.getElementById('btnPull').onclick = pullFromSheet;
-        if (document.getElementById('btnDisc')) document.getElementById('btnDisc').onclick = () => { localStorage.removeItem(SYNC_URL_KEY); syncUrl=''; syncStatus='Disconnected'; render(); };
-        document.getElementById('btnNewParty').onclick = () => { isAddPartyModalOpen = true; render(); };
-        if (document.getElementById('btnCloseParty')) document.getElementById('btnCloseParty').onclick = () => { isAddPartyModalOpen = false; render(); };
-        if (document.getElementById('formParty')) document.getElementById('formParty').onsubmit = e => {
-          e.preventDefault(); const fd = new FormData(e.target); const id = 'party_' + Date.now();
-          state.parties.push({ id, name: fd.get('name'), city: fd.get('city'), phone: fd.get('phone') });
-          state.activePartyId = id; isAddPartyModalOpen = false; autoSync(); render();
-        };
-        document.querySelectorAll('.tab-btn').forEach(b => b.onclick = () => { state.activeTab = b.dataset.tab; render(); });
-        if (document.getElementById('formLedger')) document.getElementById('formLedger').onsubmit = e => {
-          e.preventDefault(); const fd = new FormData(e.target);
-          state.mainLedger.unshift({ id: 'led_'+Date.now(), partyId: party.id, date: fd.get('date'), type: fd.get('type'), amount: Number(fd.get('amount')), mode: fd.get('mode'), ref: fd.get('ref'), notes: fd.get('notes') });
-          autoSync(); render();
-        };
-        document.querySelectorAll('[data-del-led]').forEach(b => b.onclick = () => { state.mainLedger = state.mainLedger.filter(x=>x.id!==b.dataset.delLed); autoSync(); render(); });
-        if (document.getElementById('formTarget')) document.getElementById('formTarget').onsubmit = e => {
-          e.preventDefault(); const fd = new FormData(e.target);
-          state.upiTargets.unshift({ id: 'tgt_'+Date.now(), partyId: party.id, date: new Date().toISOString().slice(0,10), payeeName: fd.get('payeeName'), upiId: fd.get('upiId'), targetAmount: Number(fd.get('targetAmount')), notes: fd.get('notes'), status: 'OPEN' });
-          autoSync(); render();
-        };
-        document.querySelectorAll('[data-del-tgt]').forEach(b => b.onclick = () => { state.upiTargets = state.upiTargets.filter(x=>x.id!==b.dataset.delTgt); autoSync(); render(); });
-        if (document.getElementById('formPayout')) document.getElementById('formPayout').onsubmit = e => {
-          e.preventDefault(); const fd = new FormData(e.target);
-          state.upiPayouts.unshift({ id: 'pay_'+Date.now(), partyId: party.id, date: new Date().toISOString().slice(0,10), recipientName: fd.get('recipientName'), amount: Number(fd.get('amount')), utr: fd.get('utr'), appMode: fd.get('appMode'), status: 'OPEN' });
-          autoSync(); render();
-        };
-        document.querySelectorAll('[data-del-pay]').forEach(b => b.onclick = () => { state.upiPayouts = state.upiPayouts.filter(x=>x.id!==b.dataset.delPay); autoSync(); render(); });
-        if (document.getElementById('btnFin')) document.getElementById('btnFin').onclick = () => {
-          const open = state.upiPayouts.filter(x => x.partyId === party.id && x.status !== 'FINALIZED');
-          if (!open.length) return alert('No open payouts');
-          const tot = open.reduce((s, x) => s + Number(x.amount), 0);
-          const bid = 'BATCH_' + Date.now();
-          open.forEach(x => { x.status = 'FINALIZED'; x.batchId = bid; });
-          state.upiTargets.filter(x => x.partyId === party.id && x.status !== 'FINALIZED').forEach(x => { x.status = 'FINALIZED'; x.batchId = bid; });
-          state.mainLedger.unshift({ id: 'led_'+Date.now(), partyId: party.id, date: new Date().toISOString().slice(0,10), type: 'RETURNED', amount: tot, mode: 'UPI-BATCH', ref: bid, notes: 'Finalized UPI Batch' });
-          state.finalizedBatches.unshift({ id: bid, partyId: party.id, date: new Date().toISOString().slice(0,10), totalPaid: tot });
-          autoSync(); render();
-        };
-        document.getElementById('btnLock').onclick = () => {
-          const note = prompt('Lock note:', 'Confirmed'); if (note === null) return;
-          state.settlements.unshift({ id: 'set_'+Date.now(), partyId: party.id, date: new Date().toISOString().slice(0,10), closingOS: m.netOS, notes: note });
-          autoSync(); render();
-        };
+        bindEvents();
       }
+
+      function bindEvents() {
+        const partySel = document.getElementById('partySelector');
+        if (partySel) {
+          partySel.onchange = e => {
+            state.activePartyId = e.target.value;
+            saveLocal();
+            render();
+          };
+        }
+
+        const btnTheme = document.getElementById('btnToggleTheme');
+        if (btnTheme) {
+          btnTheme.onclick = () => {
+            const dark = document.documentElement.classList.toggle('dark');
+            localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light');
+            render();
+          };
+        }
+
+        const btnWhatsApp = document.getElementById('btnWhatsApp');
+        if (btnWhatsApp) {
+          btnWhatsApp.onclick = () => {
+            const p = getActiveParty();
+            shareWhatsAppSummary(p, computePartyMetrics(p.id));
+          };
+        }
+
+        const btnStmt = document.getElementById('btnStatementToggle');
+        if (btnStmt) {
+          btnStmt.onclick = () => {
+            state.statementMode = !state.statementMode;
+            render();
+          };
+        }
+
+        const btnPrint = document.getElementById('btnPrint');
+        if (btnPrint) btnPrint.onclick = () => window.print();
+
+        const btnLockOS = document.getElementById('btnLockOS');
+        if (btnLockOS) btnLockOS.onclick = () => lockClosingOS(getActiveParty().id);
+
+        const btnBackup = document.getElementById('btnBackupJson');
+        if (btnBackup) btnBackup.onclick = exportJSONBackup;
+
+        const btnOpenSync = document.getElementById('btnOpenSync');
+        if (btnOpenSync) btnOpenSync.onclick = () => { isSyncModalOpen = true; render(); };
+
+        const btnCloseSync = document.getElementById('btnCloseSync');
+        if (btnCloseSync) btnCloseSync.onclick = () => { isSyncModalOpen = false; render(); };
+
+        const inputSyncUrl = document.getElementById('inputSyncUrl');
+        if (inputSyncUrl) {
+          inputSyncUrl.oninput = e => { syncUrl = e.target.value; };
+        }
+
+        const btnTest = document.getElementById('btnTestConnect');
+        if (btnTest) btnTest.onclick = testConnection;
+
+        const btnPush = document.getElementById('btnPushSheet');
+        if (btnPush) btnPush.onclick = pushToSheet;
+
+        const btnPull = document.getElementById('btnPullSheet');
+        if (btnPull) btnPull.onclick = pullFromSheet;
+
+        const btnDisc = document.getElementById('btnDisconnect');
+        if (btnDisc) {
+          btnDisc.onclick = () => {
+            localStorage.removeItem(SYNC_URL_KEY);
+            syncUrl = '';
+            syncStatus = 'Disconnected';
+            syncErrorDetail = '';
+            render();
+          };
+        }
+
+        const btnNewParty = document.getElementById('btnNewParty');
+        if (btnNewParty) btnNewParty.onclick = () => { isAddPartyModalOpen = true; render(); };
+
+        const btnCloseParty = document.getElementById('btnClosePartyModal');
+        if (btnCloseParty) btnCloseParty.onclick = () => { isAddPartyModalOpen = false; render(); };
+
+        const formNewParty = document.getElementById('formNewParty');
+        if (formNewParty) {
+          formNewParty.onsubmit = e => {
+            e.preventDefault();
+            const fd = new FormData(formNewParty);
+            const id = 'party_' + Date.now();
+            state.parties.push({
+              id: id,
+              name: String(fd.get('name') || '').trim(),
+              city: String(fd.get('city') || '').trim(),
+              phone: String(fd.get('phone') || '').trim(),
+              updatedAt: new Date().toISOString()
+            });
+            state.activePartyId = id;
+            isAddPartyModalOpen = false;
+            autoSyncIfConnected();
+            render();
+          };
+        }
+
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+          btn.onclick = () => {
+            state.activeTab = btn.getAttribute('data-tab');
+            render();
+          };
+        });
+
+        const inpSearchLedger = document.getElementById('inpSearchLedger');
+        if (inpSearchLedger) {
+          inpSearchLedger.oninput = e => {
+            ledgerFilter = e.target.value;
+            render();
+            const el = document.getElementById('inpSearchLedger');
+            if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+          };
+        }
+
+        const inpSearchUpi = document.getElementById('inpSearchUpi');
+        if (inpSearchUpi) {
+          inpSearchUpi.oninput = e => {
+            upiFilter = e.target.value;
+            render();
+            const el = document.getElementById('inpSearchUpi');
+            if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+          };
+        }
+
+        const formLedger = document.getElementById('formLedger');
+        if (formLedger) {
+          formLedger.onsubmit = async e => {
+            e.preventDefault();
+            const fd = new FormData(formLedger);
+            const file = fd.get('proofFile');
+            const proofData = await readFileAsCompressedDataUrl(file);
+            state.mainLedger.unshift({
+              id: 'led_' + Date.now(),
+              partyId: getActiveParty().id,
+              date: fd.get('date'),
+              type: fd.get('type'),
+              amount: Number(fd.get('amount')) || 0,
+              mode: fd.get('mode'),
+              ref: String(fd.get('ref') || '').trim(),
+              notes: String(fd.get('notes') || '').trim(),
+              batchId: '',
+              proofUrl: proofData,
+              updatedAt: new Date().toISOString()
+            });
+            autoSyncIfConnected();
+            render();
+          };
+        }
+
+        document.querySelectorAll('[data-del-ledger]').forEach(btn => {
+          btn.onclick = () => {
+            const id = btn.getAttribute('data-del-ledger');
+            state.mainLedger = state.mainLedger.filter(x => x.id !== id);
+            autoSyncIfConnected();
+            render();
+          };
+        });
+
+        const formTarget = document.getElementById('formTarget');
+        if (formTarget) {
+          formTarget.onsubmit = e => {
+            e.preventDefault();
+            const fd = new FormData(formTarget);
+            state.upiTargets.unshift({
+              id: 'tgt_' + Date.now(),
+              partyId: getActiveParty().id,
+              date: new Date().toISOString().slice(0, 10),
+              payeeName: String(fd.get('payeeName') || '').trim(),
+              upiId: String(fd.get('upiId') || '').trim(),
+              targetAmount: Number(fd.get('targetAmount')) || 0,
+              notes: String(fd.get('notes') || '').trim(),
+              status: 'OPEN',
+              batchId: '',
+              updatedAt: new Date().toISOString()
+            });
+            autoSyncIfConnected();
+            render();
+          };
+        }
+
+        document.querySelectorAll('[data-del-target]').forEach(btn => {
+          btn.onclick = () => {
+            const id = btn.getAttribute('data-del-target');
+            state.upiTargets = state.upiTargets.filter(x => x.id !== id);
+            autoSyncIfConnected();
+            render();
+          };
+        });
+
+        const selAlloc = document.getElementById('selAllocTarget');
+        const inpRec = document.getElementById('inpRecipient');
+        if (selAlloc && inpRec) {
+          selAlloc.onchange = () => {
+            const opt = selAlloc.options[selAlloc.selectedIndex];
+            if (opt && opt.dataset.payee && !inpRec.value) {
+              inpRec.value = opt.dataset.payee;
+            }
+          };
+        }
+
+        const formPayout = document.getElementById('formPayout');
+        if (formPayout) {
+          formPayout.onsubmit = async e => {
+            e.preventDefault();
+            const fd = new FormData(formPayout);
+            const targetId = String(fd.get('allocatedTargetId') || '');
+            const linkedTarget = state.upiTargets.find(t => t.id === targetId);
+            const file = fd.get('proofFile');
+            const proofData = await readFileAsCompressedDataUrl(file);
+            state.upiPayouts.unshift({
+              id: 'pay_' + Date.now(),
+              partyId: getActiveParty().id,
+              date: new Date().toISOString().slice(0, 10),
+              recipientName: String(fd.get('recipientName') || '').trim(),
+              upiId: linkedTarget ? linkedTarget.upiId : '',
+              amount: Number(fd.get('amount')) || 0,
+              utr: String(fd.get('utr') || '').trim(),
+              appMode: fd.get('appMode'),
+              allocatedTargetId: targetId,
+              notes: '',
+              status: 'OPEN',
+              batchId: '',
+              proofUrl: proofData,
+              updatedAt: new Date().toISOString()
+            });
+            autoSyncIfConnected();
+            render();
+          };
+        }
+
+        document.querySelectorAll('[data-del-payout]').forEach(btn => {
+          btn.onclick = () => {
+            const id = btn.getAttribute('data-del-payout');
+            state.upiPayouts = state.upiPayouts.filter(x => x.id !== id);
+            autoSyncIfConnected();
+            render();
+          };
+        });
+
+        const btnFin = document.getElementById('btnFinalizeBatch');
+        if (btnFin) {
+          btnFin.onclick = () => finalizeOpenUpiBatch(getActiveParty().id);
+        }
+
+        document.querySelectorAll('[data-view-proof]').forEach(btn => {
+          btn.onclick = () => {
+            previewImageUrl = btn.getAttribute('data-view-proof');
+            render();
+          };
+        });
+
+        const btnCloseProof = document.getElementById('btnCloseProof');
+        if (btnCloseProof) {
+          btnCloseProof.onclick = () => {
+            previewImageUrl = '';
+            render();
+          };
+        }
+      }
+
       render();
     })();
   </script>
