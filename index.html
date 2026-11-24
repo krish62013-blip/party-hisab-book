@@ -1851,20 +1851,43 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       return { parties, mainLedger, upiTargets, upiPayouts, finalizedBatches, settlements };
     }
 
+    function pickNumericAmount(obj, candidates) {
+      for (const key of candidates) {
+        const val = obj[key];
+        if (val !== undefined && val !== null && String(val).trim() !== '') {
+          const strVal = String(val).trim();
+          if (!candidates.slice(0, 2).includes(key) && /^\d{11,}$/.test(strVal)) continue;
+          const cleaned = Number(strVal.replace(/[^0-9.-]/g, ''));
+          if (!Number.isNaN(cleaned) && cleaned > 0) return cleaned;
+        }
+      }
+      return 0;
+    }
+
     function mapMainEntryObj(m, pid) {
       const rawType = String(m.rawType || m.type || m.Type || 'RECEIVED').toUpperCase();
       let t = rawType;
-      if (rawType === 'RETURNED') {
+      if (rawType === 'RETURNED' || /^\d+$/.test(rawType)) {
         const modeStr = String(m.mode || m.bankDetails || m.Bank_Details || '').toUpperCase();
-        t = (modeStr.includes('UPI BATCH') || String(m.batchId || m.Batch_ID || '').startsWith('BATCH')) ? 'UPI_CLUB' : 'CASH_RETURN';
+        const bId = String(m.batchId || m.Batch_ID || '');
+        if (bId.startsWith('BATCH') || modeStr.includes('UPI BATCH')) {
+          t = 'UPI_CLUB';
+        } else if (rawType === 'RETURNED') {
+          t = 'CASH_RETURN';
+        } else {
+          const narr = String(m.notes || m.narration || m.Narration || '').toUpperCase();
+          t = (narr.includes('RECEIVED') || narr.includes('BALANCE BROUGHT')) ? 'RECEIVED' : 'CASH_RETURN';
+        }
       } else if (!m.rawType && String(m.batchId || m.Batch_ID || '').startsWith('BATCH')) {
         t = 'UPI_CLUB';
       }
+
+      const amt = pickNumericAmount(m, ['amount', 'Amount', 'type', 'Type', 'mode', 'Bank_Details']);
       return {
         id: String(m.id || m.Txn_ID || ('M-' + Math.random().toString(36).slice(2, 7))),
         date: String(m.date || m.Date || '').slice(0, 10),
         type: t,
-        amount: Number(m.amount || m.Amount) || 0,
+        amount: amt,
         bankDetails: String(m.mode || m.bankDetails || m.Bank_Details || ''),
         narration: String(m.notes || m.narration || m.Narration || ''),
         batchId: (m.batchId || m.Batch_ID) ? String(m.batchId || m.Batch_ID) : null,
@@ -1879,7 +1902,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         date: String(t.date || t.Date || '').slice(0, 10),
         name: String(t.payeeName || t.name || t.Target_Payee || ''),
         upiId: String(t.upiId || t.Target_UPI || ''),
-        targetAmount: Number(t.targetAmount || t.Target_Amount) || 0,
+        targetAmount: pickNumericAmount(t, ['targetAmount', 'Target_Amount', 'amount', 'Amount', 'upiId']),
         note: String(t.notes || t.note || t.Note || ''),
         status: String(t.status || t.Status || 'OPEN'),
         batchId: String(t.batchId || t.Batch_ID || '')
@@ -1888,10 +1911,10 @@ function saveProofToDrive(partyName, fileName, base64Data) {
 
     function mapUpiEntryObj(u, pid) {
       const rawStatus = String(u.status || u.Status || 'OPEN').toUpperCase();
-      const normStatus = (rawStatus === 'FINALIZED' || rawStatus === 'CLUBBED') ? 'CLUBBED' : 'OPEN';
-      const payeeName = String(u.recipientName || u.payeeName || u.Paid_To || '');
+      const normStatus = (rawStatus === 'FINALIZED' || rawStatus === 'CLUBBED' || rawStatus.startsWith('BATCH')) ? 'CLUBBED' : 'OPEN';
+      const payeeName = String(u.recipientName || u.payeeName || u.Paid_To || u.name || '');
       const payeeUpi = String(u.upiId || u.payeeUpi || u.Payee_UPI || '');
-      const amt = Number(u.amount || u.Amount) || 0;
+      const amt = pickNumericAmount(u, ['amount', 'Amount', 'payeeUpi', 'utr']);
       const dt = String(u.date || u.Date || '').slice(0, 10);
       const utr = String(u.utr || u.UTR || '');
       const mode = String(u.appMode || u.App_Mode || 'UPI');
@@ -1907,7 +1930,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         utr,
         note: String(u.notes || u.note || u.Note || ''),
         status: normStatus,
-        batchId: (u.batchId || u.Batch_ID) ? String(u.batchId || u.Batch_ID) : null,
+        batchId: (u.batchId || u.Batch_ID) ? String(u.batchId || u.Batch_ID) : (rawStatus.startsWith('BATCH') ? rawStatus : null),
         proofImg: proof || makeReceiptSVG('UPI', `${payeeName || 'Payee'} (${payeeUpi})`, formatINR(amt), formatShortDate(dt), utr || 'UPI', mode)
       };
     }
@@ -1919,7 +1942,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         fromDate: String(b.fromDate || b.From_Date || b.date || '').slice(0, 10),
         toDate: String(b.toDate || b.To_Date || b.date || '').slice(0, 10),
         narration: String(b.message || b.narration || b.Narration || ''),
-        totalAmount: Number(b.totalPaid || b.totalAmount || b.Total_Amount) || 0,
+        totalAmount: pickNumericAmount(b, ['totalPaid', 'totalAmount', 'Total_Amount', 'amount']),
         entryCount: Number(b.payoutCount || b.entryCount || b.Entry_Count) || 0,
         targetSnapshot: Array.isArray(b.targetSnapshot) ? b.targetSnapshot : null
       };
@@ -1933,7 +1956,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         openingBf: Number(s.openingBf || s.Opening_BF) || 0,
         totalIn: Number(s.totalIn || s.Total_In) || 0,
         totalOut: Number(s.totalOut || s.Total_Out) || 0,
-        closingOs: Number(s.closingOS || s.closingOs || s.Closing_OS) || 0,
+        closingOs: pickNumericAmount(s, ['closingOS', 'closingOs', 'Closing_OS', 'amount']),
         settledOn: String(s.date || s.settledOn || s.Settled_On || '').slice(0, 10),
         narration: String(s.notes || s.narration || s.Narration || ''),
         entriesSnapshot: Array.isArray(s.entriesSnapshot) ? s.entriesSnapshot : []
