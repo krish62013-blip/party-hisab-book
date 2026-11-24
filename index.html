@@ -1865,24 +1865,26 @@ function saveProofToDrive(partyName, fileName, base64Data) {
     }
 
     function mapMainEntryObj(m, pid) {
-      const rawType = String(m.rawType || m.type || m.Type || 'RECEIVED').toUpperCase();
-      let t = rawType;
-      if (rawType === 'RETURNED' || /^\d+$/.test(rawType)) {
-        const modeStr = String(m.mode || m.bankDetails || m.Bank_Details || '').toUpperCase();
-        const bId = String(m.batchId || m.Batch_ID || '');
-        if (bId.startsWith('BATCH') || modeStr.includes('UPI BATCH')) {
-          t = 'UPI_CLUB';
-        } else if (rawType === 'RETURNED') {
-          t = 'CASH_RETURN';
-        } else {
-          const narr = String(m.notes || m.narration || m.Narration || '').toUpperCase();
-          t = (narr.includes('RECEIVED') || narr.includes('BALANCE BROUGHT')) ? 'RECEIVED' : 'CASH_RETURN';
-        }
-      } else if (!m.rawType && String(m.batchId || m.Batch_ID || '').startsWith('BATCH')) {
+      const amt = pickNumericAmount(m, ['amount', 'Amount', 'type', 'Type', 'mode', 'Bank_Details']);
+      const rawTypeStr = String(m.rawType || m.type || m.Type || '').toUpperCase();
+      const modeStr = String(m.mode || m.bankDetails || m.Bank_Details || '').toUpperCase();
+      const narrStr = String(m.notes || m.narration || m.Narration || '').toUpperCase();
+      const bId = String(m.batchId || m.Batch_ID || '');
+
+      let t = 'RECEIVED';
+      if (rawTypeStr === 'OS_BF') {
+        t = 'OS_BF';
+      } else if (bId.startsWith('BATCH') || modeStr.includes('UPI BATCH')) {
         t = 'UPI_CLUB';
+      } else if (rawTypeStr === 'RECEIVED' || narrStr.includes('RECEIVED') || narrStr.includes('BALANCE BROUGHT')) {
+        t = 'RECEIVED';
+      } else if (rawTypeStr === 'RETURNED' || rawTypeStr === 'CASH_RETURN' || narrStr.includes('RETURN') || narrStr.includes('CASH') || narrStr.includes('PAID')) {
+        t = 'CASH_RETURN';
+      } else if (/^\d+$/.test(rawTypeStr)) {
+        // When columns are shifted, the first main ledger entry (e.g., 12534591 Balance brought) is RECEIVED
+        t = (narrStr.includes('BROUGHT') || narrStr.includes('ADVANCE') || narrStr.includes('DEPOSIT')) ? 'RECEIVED' : 'CASH_RETURN';
       }
 
-      const amt = pickNumericAmount(m, ['amount', 'Amount', 'type', 'Type', 'mode', 'Bank_Details']);
       return {
         id: String(m.id || m.Txn_ID || ('M-' + Math.random().toString(36).slice(2, 7))),
         date: String(m.date || m.Date || '').slice(0, 10),
@@ -1890,7 +1892,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         amount: amt,
         bankDetails: String(m.mode || m.bankDetails || m.Bank_Details || ''),
         narration: String(m.notes || m.narration || m.Narration || ''),
-        batchId: (m.batchId || m.Batch_ID) ? String(m.batchId || m.Batch_ID) : null,
+        batchId: bId ? bId : null,
         settlementId: (m.settlementId || m.Settlement_ID) ? String(m.settlementId || m.Settlement_ID) : null,
         proofImg: (m.proofUrl || m.proofImg || m.Proof_URL) ? String(m.proofUrl || m.proofImg || m.Proof_URL) : null
       };
@@ -2002,7 +2004,17 @@ function saveProofToDrive(partyName, fileName, base64Data) {
           contact: String(p.contact || p.Contact || 'Owner'),
           city: String(p.city || p.City || 'India'),
           phone: String(p.phone || p.Phone || ''),
-          mainLedger: rawMain.map(m => mapMainEntryObj(m, pid)),
+          mainLedger: (function() {
+            const mapped = rawMain.map(m => mapMainEntryObj(m, pid));
+            const hasReceived = mapped.some(x => x.type === 'RECEIVED');
+            if (!hasReceived && mapped.length > 0) {
+              const bfIdx = mapped.findIndex(x => x.type !== 'UPI_CLUB' && /brought|received|deposit|opening/i.test(x.narration));
+              if (bfIdx !== -1) {
+                mapped[bfIdx].type = 'RECEIVED';
+              }
+            }
+            return mapped;
+          })(),
           upiTargets: rawTargets.map(t => mapTargetObj(t, pid)),
           upiHisab: rawUpi.map(u => mapUpiEntryObj(u, pid)),
           finalizedBatches: rawBatches.map(b => mapBatchObj(b, pid)),
