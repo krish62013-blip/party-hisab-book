@@ -1851,84 +1851,142 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       return { parties, mainLedger, upiTargets, upiPayouts, finalizedBatches, settlements };
     }
 
+    function mapMainEntryObj(m, pid) {
+      const rawType = String(m.rawType || m.type || m.Type || 'RECEIVED').toUpperCase();
+      let t = rawType;
+      if (rawType === 'RETURNED') {
+        const modeStr = String(m.mode || m.bankDetails || m.Bank_Details || '').toUpperCase();
+        t = (modeStr.includes('UPI BATCH') || String(m.batchId || m.Batch_ID || '').startsWith('BATCH')) ? 'UPI_CLUB' : 'CASH_RETURN';
+      } else if (!m.rawType && String(m.batchId || m.Batch_ID || '').startsWith('BATCH')) {
+        t = 'UPI_CLUB';
+      }
+      return {
+        id: String(m.id || m.Txn_ID || ('M-' + Math.random().toString(36).slice(2, 7))),
+        date: String(m.date || m.Date || '').slice(0, 10),
+        type: t,
+        amount: Number(m.amount || m.Amount) || 0,
+        bankDetails: String(m.mode || m.bankDetails || m.Bank_Details || ''),
+        narration: String(m.notes || m.narration || m.Narration || ''),
+        batchId: (m.batchId || m.Batch_ID) ? String(m.batchId || m.Batch_ID) : null,
+        settlementId: (m.settlementId || m.Settlement_ID) ? String(m.settlementId || m.Settlement_ID) : null,
+        proofImg: (m.proofUrl || m.proofImg || m.Proof_URL) ? String(m.proofUrl || m.proofImg || m.Proof_URL) : null
+      };
+    }
+
+    function mapTargetObj(t, pid) {
+      return {
+        id: String(t.id || t.Target_ID || ('TGT-' + Math.random().toString(36).slice(2, 7))),
+        date: String(t.date || t.Date || '').slice(0, 10),
+        name: String(t.payeeName || t.name || t.Target_Payee || ''),
+        upiId: String(t.upiId || t.Target_UPI || ''),
+        targetAmount: Number(t.targetAmount || t.Target_Amount) || 0,
+        note: String(t.notes || t.note || t.Note || ''),
+        status: String(t.status || t.Status || 'OPEN'),
+        batchId: String(t.batchId || t.Batch_ID || '')
+      };
+    }
+
+    function mapUpiEntryObj(u, pid) {
+      const rawStatus = String(u.status || u.Status || 'OPEN').toUpperCase();
+      const normStatus = (rawStatus === 'FINALIZED' || rawStatus === 'CLUBBED') ? 'CLUBBED' : 'OPEN';
+      const payeeName = String(u.recipientName || u.payeeName || u.Paid_To || '');
+      const payeeUpi = String(u.upiId || u.payeeUpi || u.Payee_UPI || '');
+      const amt = Number(u.amount || u.Amount) || 0;
+      const dt = String(u.date || u.Date || '').slice(0, 10);
+      const utr = String(u.utr || u.UTR || '');
+      const mode = String(u.appMode || u.App_Mode || 'UPI');
+      const proof = (u.proofUrl || u.proofImg || u.Proof_URL) ? String(u.proofUrl || u.proofImg || u.Proof_URL) : null;
+      return {
+        id: String(u.id || u.UPI_ID || ('U-' + Math.random().toString(36).slice(2, 7))),
+        date: dt,
+        payeeName,
+        payeeUpi,
+        allocatedTargetId: (u.allocatedTargetId || u.Allocated_Target_ID) ? String(u.allocatedTargetId || u.Allocated_Target_ID) : null,
+        amount: amt,
+        appMode: mode,
+        utr,
+        note: String(u.notes || u.note || u.Note || ''),
+        status: normStatus,
+        batchId: (u.batchId || u.Batch_ID) ? String(u.batchId || u.Batch_ID) : null,
+        proofImg: proof || makeReceiptSVG('UPI', `${payeeName || 'Payee'} (${payeeUpi})`, formatINR(amt), formatShortDate(dt), utr || 'UPI', mode)
+      };
+    }
+
+    function mapBatchObj(b, pid) {
+      return {
+        id: String(b.id || b.Batch_ID || ('BATCH-' + Math.random().toString(36).slice(2, 7))),
+        date: String(b.date || b.Date || '').slice(0, 10),
+        fromDate: String(b.fromDate || b.From_Date || b.date || '').slice(0, 10),
+        toDate: String(b.toDate || b.To_Date || b.date || '').slice(0, 10),
+        narration: String(b.message || b.narration || b.Narration || ''),
+        totalAmount: Number(b.totalPaid || b.totalAmount || b.Total_Amount) || 0,
+        entryCount: Number(b.payoutCount || b.entryCount || b.Entry_Count) || 0,
+        targetSnapshot: Array.isArray(b.targetSnapshot) ? b.targetSnapshot : null
+      };
+    }
+
+    function mapSettlementObj(s, pid) {
+      return {
+        id: String(s.id || s.Settlement_ID || ('SET-' + Math.random().toString(36).slice(2, 7))),
+        fromDate: String(s.fromDate || s.From_Date || s.date || '').slice(0, 10),
+        toDate: String(s.toDate || s.To_Date || s.date || '').slice(0, 10),
+        openingBf: Number(s.openingBf || s.Opening_BF) || 0,
+        totalIn: Number(s.totalIn || s.Total_In) || 0,
+        totalOut: Number(s.totalOut || s.Total_Out) || 0,
+        closingOs: Number(s.closingOS || s.closingOs || s.Closing_OS) || 0,
+        settledOn: String(s.date || s.settledOn || s.Settled_On || '').slice(0, 10),
+        narration: String(s.notes || s.narration || s.Narration || ''),
+        entriesSnapshot: Array.isArray(s.entriesSnapshot) ? s.entriesSnapshot : []
+      };
+    }
+
     function unflattenSheetDataToState(flatData, currentLocalState) {
       if (!flatData || !Array.isArray(flatData.parties) || flatData.parties.length === 0) return null;
+
+      const allMain = flatData.mainLedger || [];
+      const allTargets = flatData.upiTargets || [];
+      const allUpi = flatData.upiPayouts || [];
+      const allBatches = flatData.finalizedBatches || [];
+      const allSettle = flatData.settlements || [];
+
       const parties = flatData.parties.map((p, idx) => {
-        const pid = p.id;
-        const pMain = (flatData.mainLedger || []).filter(m => m.partyId === pid).map(m => {
-          let t = m.rawType || (m.type === 'RECEIVED' ? 'RECEIVED' : 'CASH_RETURN');
-          if (!m.rawType && String(m.batchId || '').startsWith('BATCH')) t = 'UPI_CLUB';
-          return {
-            id: m.id,
-            date: String(m.date || '').slice(0, 10),
-            type: t,
-            amount: Number(m.amount) || 0,
-            bankDetails: m.mode || '',
-            narration: m.notes || '',
-            batchId: m.batchId || null,
-            settlementId: m.settlementId || null,
-            proofImg: m.proofUrl || null
-          };
-        });
-        const pTargets = (flatData.upiTargets || []).filter(t => t.partyId === pid).map(t => ({
-          id: t.id,
-          date: String(t.date || '').slice(0, 10),
-          name: t.payeeName || '',
-          upiId: t.upiId || '',
-          targetAmount: Number(t.targetAmount) || 0,
-          note: t.notes || '',
-          status: t.status || 'OPEN',
-          batchId: t.batchId || ''
-        }));
-        const pUpi = (flatData.upiPayouts || []).filter(u => u.partyId === pid).map(u => ({
-          id: u.id,
-          date: String(u.date || '').slice(0, 10),
-          payeeName: u.recipientName || '',
-          payeeUpi: u.upiId || '',
-          allocatedTargetId: u.allocatedTargetId || null,
-          amount: Number(u.amount) || 0,
-          appMode: u.appMode || 'UPI',
-          utr: u.utr || '',
-          note: u.notes || '',
-          status: (u.status === 'FINALIZED' || u.status === 'CLUBBED') ? 'CLUBBED' : 'OPEN',
-          batchId: u.batchId || null,
-          proofImg: u.proofUrl || makeReceiptSVG('UPI', `${u.recipientName || 'Payee'} (${u.upiId || ''})`, formatINR(u.amount || 0), formatShortDate(String(u.date || '').slice(0, 10)), u.utr || u.id, u.appMode || 'UPI')
-        }));
-        const pBatches = (flatData.finalizedBatches || []).filter(b => b.partyId === pid).map(b => ({
-          id: b.id,
-          date: String(b.date || '').slice(0, 10),
-          fromDate: String(b.fromDate || b.date || '').slice(0, 10),
-          toDate: String(b.toDate || b.date || '').slice(0, 10),
-          narration: b.message || '',
-          totalAmount: Number(b.totalPaid) || 0,
-          entryCount: Number(b.payoutCount) || 0
-        }));
-        const pSettle = (flatData.settlements || []).filter(s => s.partyId === pid).map(s => ({
-          id: s.id,
-          fromDate: String(s.fromDate || s.date || '').slice(0, 10),
-          toDate: String(s.toDate || s.date || '').slice(0, 10),
-          openingBf: 0,
-          totalIn: 0,
-          totalOut: 0,
-          closingOs: Number(s.closingOS) || 0,
-          settledOn: String(s.date || '').slice(0, 10),
-          narration: s.notes || ''
-        }));
+        const pid = String(p.id || p.Party_ID || ('P-' + (idx + 1)));
+
+        const rawMain = (Array.isArray(p.mainLedger) && p.mainLedger.length > 0)
+          ? p.mainLedger
+          : allMain.filter(m => String(m.partyId || m.Party_ID || pid) === pid);
+
+        const rawTargets = (Array.isArray(p.upiTargets) && p.upiTargets.length > 0)
+          ? p.upiTargets
+          : allTargets.filter(t => String(t.partyId || t.Party_ID || pid) === pid);
+
+        const rawUpi = (Array.isArray(p.upiHisab) && p.upiHisab.length > 0)
+          ? p.upiHisab
+          : allUpi.filter(u => String(u.partyId || u.Party_ID || pid) === pid);
+
+        const rawBatches = (Array.isArray(p.finalizedBatches) && p.finalizedBatches.length > 0)
+          ? p.finalizedBatches
+          : allBatches.filter(b => String(b.partyId || b.Party_ID || pid) === pid);
+
+        const rawSettle = (Array.isArray(p.settlements) && p.settlements.length > 0)
+          ? p.settlements
+          : allSettle.filter(s => String(s.partyId || s.Party_ID || pid) === pid);
 
         return {
           id: pid,
-          code: p.code || ('P' + String.fromCharCode(65 + (idx % 26))),
-          name: p.name || ('Party ' + (idx + 1)),
-          contact: p.contact || 'Owner',
-          city: p.city || 'India',
-          phone: p.phone || '',
-          mainLedger: pMain,
-          upiTargets: pTargets,
-          upiHisab: pUpi,
-          finalizedBatches: pBatches,
-          settlements: pSettle
+          code: String(p.code || p.Code || ('P' + String.fromCharCode(65 + (idx % 26)))),
+          name: String(p.name || p.Party_Name || ('Party ' + (idx + 1))),
+          contact: String(p.contact || p.Contact || 'Owner'),
+          city: String(p.city || p.City || 'India'),
+          phone: String(p.phone || p.Phone || ''),
+          mainLedger: rawMain.map(m => mapMainEntryObj(m, pid)),
+          upiTargets: rawTargets.map(t => mapTargetObj(t, pid)),
+          upiHisab: rawUpi.map(u => mapUpiEntryObj(u, pid)),
+          finalizedBatches: rawBatches.map(b => mapBatchObj(b, pid)),
+          settlements: rawSettle.map(s => mapSettlementObj(s, pid))
         };
       });
+
       return mergeCloudWithLocalProofs({ parties }, currentLocalState);
     }
 
@@ -2112,7 +2170,11 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       safeStorage.setItem(GAS_URL_KEY, url);
       updateCloudSyncBadge('SYNCING', 'Pulling...');
       try {
-        const json = await jsonpRequest(url, 'pull');
+        let json = await jsonpRequest(url, 'LOAD_ALL');
+        if (!json || !json.ok || !json.data) {
+          const fallbackJson = await jsonpRequest(url, 'pull');
+          if (fallbackJson && fallbackJson.ok && fallbackJson.data) json = fallbackJson;
+        }
         if (json && json.ok && json.data) {
           if (Array.isArray(json.data.parties) && json.data.parties.length > 0) {
             const reconstructed = unflattenSheetDataToState(json.data, state);
