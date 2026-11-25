@@ -1916,13 +1916,35 @@ function saveProofToDrive(partyName, fileName, base64Data) {
     }
 
     function mapTargetObj(t, pid) {
+      const rawName = String(t.payeeName || t.name || t.Target_Payee || t.Payee_Name || '').trim();
+      const rawNote = String(t.notes || t.note || t.Note || '').trim();
+      const rawUpi = String(t.upiId || t.Target_UPI || t.Payee_UPI || '').trim();
+      const amt = pickNumericAmount(t, ['targetAmount', 'Target_Amount', 'amount', 'Amount', 'upiId']);
+      const amtStr = String(amt || '');
+
+      const isPureNum = (s) => /^\d+$/.test(String(s || '').trim());
+      const isStatus = (s) => /^(open|closed|finalized|clubbed|scanner|sanner|na|null|undefined)$/i.test(String(s || '').trim());
+
+      // Pick the best human name across rawName, rawNote, rawUpi (handling shifted columns in sheets)
+      let bestName = '';
+      if (rawName && !isPureNum(rawName) && !isStatus(rawName) && rawName !== amtStr) {
+        bestName = rawName;
+      } else if (rawNote && !isPureNum(rawNote) && !isStatus(rawNote) && rawNote !== amtStr) {
+        bestName = rawNote;
+      } else if (rawUpi && !isPureNum(rawUpi) && !isStatus(rawUpi) && rawUpi !== amtStr) {
+        bestName = rawUpi;
+      } else {
+        bestName = rawName || rawNote || rawUpi || 'Target Payee';
+      }
+
       return {
         id: String(t.id || t.Target_ID || ('TGT-' + Math.random().toString(36).slice(2, 7))),
         date: String(t.date || t.Date || '').slice(0, 10),
-        name: String(t.payeeName || t.name || t.Target_Payee || ''),
-        upiId: String(t.upiId || t.Target_UPI || ''),
-        targetAmount: pickNumericAmount(t, ['targetAmount', 'Target_Amount', 'amount', 'Amount', 'upiId']),
-        note: String(t.notes || t.note || t.Note || ''),
+        name: bestName,
+        rawName: rawName,
+        upiId: rawUpi,
+        targetAmount: amt,
+        note: rawNote,
         status: String(t.status || t.Status || 'OPEN'),
         batchId: String(t.batchId || t.Batch_ID || '')
       };
@@ -3249,19 +3271,17 @@ function saveProofToDrive(partyName, fileName, base64Data) {
 
     // ==================== ADD / EDIT UPI PAYMENT ====================
     function getTargetDisplayName(t) {
-      const rawName = String(t.name || '').trim();
-      const rawNote = String(t.note || '').trim();
-      const rawUpi = String(t.upiId || '').trim();
-      if (rawName && !/^\d{7,}$/.test(rawName) && !/^scanner/i.test(rawName) && !/^sanner/i.test(rawName)) {
-        return rawName;
+      const candidates = [t.name, t.rawName, t.note, t.upiId].map(v => String(v || '').trim());
+      const amtStr = String(t.targetAmount ?? '').trim();
+
+      for (const val of candidates) {
+        if (!val) continue;
+        if (/^\d+$/.test(val)) continue;
+        if (/^(open|closed|finalized|clubbed|na|null|undefined)$/i.test(val)) continue;
+        if (amtStr && val === amtStr) continue;
+        return val;
       }
-      if (rawNote && !/^\d{7,}$/.test(rawNote) && !/^OPEN$/i.test(rawNote)) {
-        return rawNote;
-      }
-      if (rawUpi && !/^\d{7,}$/.test(rawUpi)) {
-        return rawUpi;
-      }
-      return rawName || rawUpi || rawNote || 'Target Payee';
+      return t.name || t.upiId || 'Target Payee';
     }
 
     function populateTargetDropdownInUpiModal(selectedId) {
