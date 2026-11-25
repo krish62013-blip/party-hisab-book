@@ -49,6 +49,8 @@
     }
 
     * { box-sizing: border-box; }
+    .stmt-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+    .stmt-table td, .stmt-table th { overflow-wrap: anywhere; }
     html, body {
       max-width: 100%;
       overflow-x: hidden;
@@ -131,6 +133,8 @@
         color: #0f172a !important;
       }
       .page-break { page-break-before: always; }
+      .stmt-scroll { overflow: visible !important; }
+      .stmt-table { min-width: 0 !important; }
     }
   </style>
 </head>
@@ -1143,6 +1147,8 @@ function saveProofToDrive(partyName, fileName, base64Data) {
     }
 
     let state = loadInitialState();
+    normalizeData(state);
+    safeStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 
     function saveState(skipCloudSync) {
       safeStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -1184,64 +1190,48 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       sel.innerHTML = [
         `<option value="">-- Unassigned / Direct Payout --</option>`,
         ...activeTargets.map(t => {
-          const label = cleanChipNameOnly(getTargetDisplayName(t)) || cleanChipNameOnly(t.name) || 'Target Payee';
+          const label = realName(t.name) || 'Target Payee';
           return `<option value="${t.id}" ${t.id === selectedId ? 'selected' : ''}>${escapeHTML(label)} (${escapeHTML(t.upiId || '')} • ${formatINR(t.targetAmount)})</option>`;
         })
       ].join('');
 
       const seenNames = new Set();
       const nameChips = [];
+      const addChip = (name, targetId, upiId) => {
+        const key = name.toLowerCase();
+        if (seenNames.has(key)) return;
+        seenNames.add(key);
+        nameChips.push({ name, targetId: targetId || '', upiId: upiId || '' });
+      };
+      activeTargets.forEach(t => { const n = realName(t.name); if (n) addChip(n, t.id, t.upiId); });
+      (party.upiHisab || []).forEach(u => { const n = realName(u.payeeName); if (n) addChip(n, u.allocatedTargetId, u.payeeUpi); });
 
-      (party.upiHisab || []).forEach(u => {
-        const hasDate = Boolean(String(u.date || '').trim());
-        const hasUpiOrRef = Boolean(String(u.payeeUpi || u.upiId || '').trim());
-        const pName = cleanChipNameOnly(u.payeeName || u.name);
-        if (hasDate && hasUpiOrRef && pName) {
-          const key = pName.toLowerCase();
-          if (!seenNames.has(key)) {
-            seenNames.add(key);
-            nameChips.push({ targetId: u.allocatedTargetId || '', name: pName, upiId: u.payeeUpi || u.upiId || '' });
-          }
-        }
-      });
-
-      activeTargets.forEach(t => {
-        const hasDate = Boolean(String(t.date || '').trim());
-        const hasUpiOrRef = Boolean(String(t.upiId || '').trim());
-        const tName = cleanChipNameOnly(getTargetDisplayName(t)) || cleanChipNameOnly(t.name);
-        if (hasDate && hasUpiOrRef && tName) {
-          const key = tName.toLowerCase();
-          if (!seenNames.has(key)) {
-            seenNames.add(key);
-            nameChips.push({ targetId: t.id, name: tName, upiId: t.upiId || '' });
-          }
-        }
-      });
-
-      chips.innerHTML = nameChips.map(c => `
-        <button type="button" onclick="window.selectQuickPayeeChip('${escapeHTML(c.targetId)}', '${escapeHTML(c.name)}', '${escapeHTML(c.upiId)}')"
+      window.__quickChips = nameChips;
+      chips.innerHTML = nameChips.length ? nameChips.map((c, i) => `
+        <button type="button" onclick="window.pickQuickChip(${i})"
           class="px-2.5 py-1 rounded-full bg-indigo-600/15 hover:bg-indigo-600 hover:text-white text-indigo-600 text-[11px] font-extrabold transition cursor-pointer">
           ${escapeHTML(c.name)}
         </button>
-      `).join('');
+      `).join('') : '<span class="text-[11px] theme-text-faint">No saved payee names yet</span>';
     }
 
+    window.pickQuickChip = function (i) {
+      const c = (window.__quickChips || [])[i];
+      if (!c) return;
+      if (c.targetId) { window.selectQuickTargetChip(c.targetId); document.getElementById('inpUpiName').value = c.name; return; }
+      document.getElementById('inpUpiName').value = c.name;
+      if (c.upiId) document.getElementById('inpUpiId').value = c.upiId;
+    };
     window.selectQuickPayeeChip = function (targetId, name, upiId) {
-      const cleanN = cleanChipNameOnly(name) || name || '';
-      if (targetId) {
-        window.selectQuickTargetChip(targetId);
-        if (cleanN) document.getElementById('inpUpiName').value = cleanN;
-        return;
-      }
-      if (cleanN) document.getElementById('inpUpiName').value = cleanN;
-      if (upiId) document.getElementById('inpUpiId').value = upiId;
+      document.getElementById('inpUpiName').value = realName(name) || name || '';
+      if (targetId) window.selectQuickTargetChip(targetId); else if (upiId) document.getElementById('inpUpiId').value = upiId;
     };
 
     window.selectQuickTargetChip = function (targetId) {
       const party = getActiveParty();
       const t = party.upiTargets.find(x => x.id === targetId);
       if (!t) return;
-      document.getElementById('inpUpiName').value = cleanChipNameOnly(getTargetDisplayName(t)) || t.name;
+      document.getElementById('inpUpiName').value = realName(t.name) || t.name;
       document.getElementById('inpUpiId').value = t.upiId;
       document.getElementById('inpUpiAllocateTarget').value = t.id;
     };
@@ -1413,7 +1403,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
           if (fallbackJson && fallbackJson.ok && fallbackJson.data) json = fallbackJson;
         }
         if (json && json.ok && json.data && Array.isArray(json.data.parties) && json.data.parties.length > 0) {
-          state = json.data;
+          state = normalizeData(json.data);
           saveState(true);
           refreshCurrentScreen();
           const nowStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
@@ -1500,10 +1490,56 @@ function saveProofToDrive(partyName, fileName, base64Data) {
 
     function formatShortDate(iso) {
       if (!iso) return '';
-      const parts = iso.split('-');
-      if (parts.length !== 3) return iso;
+      const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (!m) return String(iso);
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      return `${parts[2]} ${months[parseInt(parts[1], 10) - 1] || parts[1]} ${parts[0]}`;
+      return `${m[3]} ${months[parseInt(m[2], 10) - 1] || m[2]} ${m[1]}`;
+    }
+
+    function isDateLike(v) { return /^\d{4}-\d{2}-\d{2}/.test(String(v == null ? '' : v).trim()); }
+
+    // Returns a clean person/firm name, or '' if the value is a phone, UPI id, amount, date or status word
+    function realName(v) {
+      let s = String(v == null ? '' : v).trim();
+      if (!s) return '';
+      if (s.indexOf('@') > -1) return '';
+      if (isDateLike(s)) return '';
+      if (/^[₹$]?\s*[\d,.\s]+(\/-|rs\.?|inr)?$/i.test(s)) return '';
+      const letters = (s.match(/[A-Za-z\u0900-\u097F]/g) || []).length;
+      const digits = (s.match(/\d/g) || []).length;
+      if (letters < 2) return '';
+      if (digits >= 7 && digits > letters) return '';
+      if (/^(open|closed|finalized|clubbed|scanner|sanner|na|null|undefined|unassigned)$/i.test(s)) return '';
+      return s.replace(/\b\d{7,13}\b/g, '').replace(/^[\s\-•|]+|[\s\-•|]+$/g, '').trim();
+    }
+
+    // Name to show for a UPI payout: its own name, else its target's name, never a phone/amount
+    function payeeNameOf(u, party) {
+      const own = realName(u.payeeName);
+      if (own) return own;
+      const t = (party.upiTargets || []).find(x => x.id === u.allocatedTargetId);
+      return (t && realName(t.name)) || 'Payee';
+    }
+
+    // Repairs rows whose fields got swapped (names in date column, dates in name column, etc.)
+    function normalizeData(st) {
+      if (!st || !Array.isArray(st.parties)) return st;
+      st.parties.forEach(p => {
+        [['upiHisab', 'payeeName', 'payeeUpi'], ['upiTargets', 'name', 'upiId']].forEach(([list, nk, uk]) => {
+          (p[list] || []).forEach(r => {
+            if (typeof r.date === 'string' && r.date.length > 10 && isDateLike(r.date)) r.date = r.date.slice(0, 10);
+            if (!isDateLike(r.date)) {
+              if (isDateLike(r[nk])) { const t = r.date; r.date = String(r[nk]).slice(0, 10); r[nk] = t || ''; }
+              else if (isDateLike(r[uk])) { const t = r.date; r.date = String(r[uk]).slice(0, 10); r[uk] = t || ''; }
+            }
+            if (!realName(r[nk]) && realName(r[uk])) { const t = r[nk]; r[nk] = r[uk]; r[uk] = t || ''; }
+          });
+        });
+        (p.mainLedger || []).forEach(r => {
+          if (typeof r.date === 'string' && r.date.length > 10 && isDateLike(r.date)) r.date = r.date.slice(0, 10);
+        });
+      });
+      return st;
     }
 
     function escapeHTML(str) {
@@ -1587,11 +1623,18 @@ function saveProofToDrive(partyName, fileName, base64Data) {
 
     window.triggerSafePrint = function () { try { window.print(); } catch (e) { showToast('Use Download Statement (.html) if print is blocked'); } };
 
+    function proofAppendixHtml() {
+      const list = window.__stmtProofs || [];
+      if (!list.length) return '';
+      return '<div style="margin-top:28px;"><h2 style="font-size:16px;font-weight:800;margin-bottom:10px;">Payment proofs</h2>' +
+        list.map((p, i) => `<div id="stmt-proof-${i}" style="border:1px solid #cbd5e1;border-radius:10px;padding:10px;margin-bottom:12px;page-break-inside:avoid;"><div style="font-size:12px;margin-bottom:6px;"><strong>${escapeHTML(p.name)}</strong> • ${formatINR(p.amount)} • ${escapeHTML(formatShortDate(p.date))} • UTR: ${escapeHTML(p.utr || '—')}</div><img src="${p.src}" alt="Proof" style="max-width:100%;max-height:560px;object-fit:contain;"></div>`).join('') + '</div>';
+    }
+
     window.downloadStatementFile = function () {
       const party = getActiveParty();
       const printArea = document.getElementById('pdfPrintArea');
       if (!printArea) return;
-      const htmlDoc = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><title>${escapeHTML(party ? party.name : 'Party Hisab Statement')}</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="bg-white text-slate-900 p-8 max-w-4xl mx-auto">${printArea.innerHTML}<script>window.onload=function(){try{window.print();}catch(e){}};<\/script></body></html>`;
+      const htmlDoc = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><title>${escapeHTML(party ? party.name : 'Party Hisab Statement')}</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="bg-white text-slate-900 p-8 max-w-4xl mx-auto">${printArea.innerHTML}${proofAppendixHtml()}<script>window.onload=function(){try{window.print();}catch(e){}};<\/script></body></html>`;
       const blob = new Blob([htmlDoc], { type: 'text/html;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -2205,62 +2248,85 @@ function saveProofToDrive(partyName, fileName, base64Data) {
     };
 
     // ==================== CLEAN A4 PDF GENERATORS ====================
+    // ---- shared UPI statement table: header and cells come from ONE column list, so they can never go out of sync ----
+    const STMT_TD = 'border:1px solid #cbd5e1;padding:8px;vertical-align:top;word-break:break-word;';
+    const STMT_TH = 'border:1px solid #cbd5e1;padding:8px;vertical-align:middle;';
+
+    function stmtProofCell(u, name) {
+      const src = u.proofImg;
+      if (!src || String(src).startsWith('data:image/svg+xml')) return '<span style="color:#94a3b8;">—</span>';
+      const idx = window.__stmtProofs.push({ src, name, amount: u.amount, date: u.date, utr: u.utr }) - 1;
+      return `<a href="#stmt-proof-${idx}" onclick="return window.openStmtProof ? window.openStmtProof(${idx}) : true" style="display:inline-block;padding:3px 9px;border-radius:6px;background:#1d4ed8;color:#ffffff;font-size:11px;font-weight:700;text-decoration:none;">Proof</a>`;
+    }
+
+    window.openStmtProof = function (idx) {
+      const p = (window.__stmtProofs || [])[idx];
+      if (!p) return false;
+      const party = getActiveParty();
+      currentProofPayload = { partyName: party.name, title: p.name, sub: '', amount: formatINR(p.amount), date: formatShortDate(p.date), ref: p.utr || '—', mode: 'UPI' };
+      const pm = document.getElementById('proofModal');
+      if (pm) pm.style.zIndex = '70';
+      showProofModal(p.src, currentProofPayload);
+      return false;
+    };
+
+    function buildUpiStatementTable(entries, party, withRunning) {
+      window.__stmtProofs = [];
+      let running = 0, total = 0;
+      const cols = [
+        { h: '#', w: 4, a: 'left', c: (u, i) => String(i + 1) },
+        { h: 'Date', w: 11, a: 'left', nowrap: true, c: u => escapeHTML(formatShortDate(u.date)) },
+        { h: 'Paid To', w: withRunning ? 24 : 28, a: 'left', c: u => {
+            const upi = /^(na|n\/a|nil|-)$/i.test(String(u.payeeUpi || '').trim()) ? '' : String(u.payeeUpi || '').trim();
+            return `<strong style="font-size:13px;">${escapeHTML(payeeNameOf(u, party))}</strong>` + (upi ? `<br><span style="font-size:11px;color:#475569;">${escapeHTML(upi)}</span>` : '');
+        } },
+        { h: 'Target Party', w: withRunning ? 17 : 20, a: 'left', c: u => {
+            const t = (party.upiTargets || []).find(x => x.id === u.allocatedTargetId);
+            const tn = t ? realName(t.name) : '';
+            return tn ? `<strong>${escapeHTML(tn)}</strong>` : '<span style="color:#94a3b8;">Unassigned</span>';
+        } },
+        { h: 'UTR / Ref', w: withRunning ? 13 : 15, a: 'left', num: true, c: u => escapeHTML(u.utr || '—') },
+        { h: 'Amount (₹)', w: withRunning ? 11 : 13, a: 'right', num: true, bold: true, c: u => formatINR(u.amount) }
+      ];
+      if (withRunning) cols.push({ h: 'Running (₹)', w: 11, a: 'right', num: true, c: (u, i, run) => formatINR(run) });
+      cols.push({ h: 'Proof', w: 9, a: 'center', c: u => stmtProofCell(u, payeeNameOf(u, party)) });
+
+      const rows = entries.map((u, i) => {
+        const amt = Number(u.amount) || 0;
+        running += amt; total += amt;
+        return '<tr>' + cols.map(col => `<td style="${STMT_TD}text-align:${col.a};${col.nowrap ? 'white-space:nowrap;' : ''}${col.bold ? 'font-weight:800;' : ''}${(col.h.startsWith('Amount') || col.h.startsWith('Running')) ? 'white-space:nowrap;' : ''}"${col.num ? ' class="num"' : ''}>${col.c(u, i, running)}</td>`).join('') + '</tr>';
+      }).join('');
+
+      const amtIdx = cols.findIndex(c => c.h.startsWith('Amount'));
+      const tail = cols.slice(amtIdx + 1).map(col => `<td style="border:1px solid #0f172a;padding:8px;text-align:${col.a};" class="num">${col.h.startsWith('Running') ? formatINR(total) : ''}</td>`).join('');
+      const empty = `<tr><td colspan="${cols.length}" style="${STMT_TD}padding:16px;text-align:center;color:#64748b;">No UPI payments to show.</td></tr>`;
+      const html = `<div class="stmt-scroll"><table class="stmt-table" style="width:100%;min-width:${withRunning ? 820 : 760}px;table-layout:fixed;border-collapse:collapse;border:1px solid #cbd5e1;font-size:12px;">
+        <colgroup>${cols.map(col => `<col style="width:${col.w}%">`).join('')}</colgroup>
+        <thead><tr style="background:#f1f5f9;">${cols.map(col => `<th style="${STMT_TH}text-align:${col.a};">${escapeHTML(col.h)}</th>`).join('')}</tr></thead>
+        <tbody>${entries.length ? rows : empty}
+          <tr style="background:#0f172a;color:#ffffff;font-weight:800;"><td colspan="${amtIdx}" style="border:1px solid #0f172a;padding:8px;text-align:right;">Total</td><td style="border:1px solid #0f172a;padding:8px;text-align:right;" class="num">${formatINR(total)}</td>${tail}</tr>
+        </tbody></table></div>`;
+      return { html, total };
+    }
+
     window.generateCurrentUpiLedgerPDF = function () {
       const party = getActiveParty();
-      const openEntries = [...(party.upiHisab || []).filter(u => u.status === 'OPEN')].sort((a, b) => a.date.localeCompare(b.date));
-      let runningTotal = 0;
-
-      const rowsHtml = openEntries.length === 0
-        ? `<tr><td colspan="6" style="border:1px solid #cbd5e1;padding:16px;text-align:center;color:#64748b;">No open UPI payments before finalize hisab.</td></tr>`
-        : openEntries.map((u, i) => {
-            const amt = Number(u.amount) || 0;
-            runningTotal += amt;
-            const pName = cleanChipNameOnly(u.payeeName) || u.payeeName || 'Payee';
-            const tgtObj = (party.upiTargets || []).find(t => t.id === u.allocatedTargetId);
-            const tgtLabel = tgtObj ? (cleanChipNameOnly(getTargetDisplayName(tgtObj)) || tgtObj.name) : 'Unassigned';
-            return `<tr>
-              <td style="border:1px solid #cbd5e1;padding:8px;" class="num">${i + 1}</td>
-              <td style="border:1px solid #cbd5e1;padding:8px;white-space:nowrap;" class="num">${formatShortDate(u.date)}</td>
-              <td style="border:1px solid #cbd5e1;padding:8px;"><strong>${escapeHTML(pName)}</strong>${u.payeeUpi ? '<br><span style="color:#475569;font-size:11px;">' + escapeHTML(u.payeeUpi) + '</span>' : ''}</td>
-              <td style="border:1px solid #cbd5e1;padding:8px;"><strong>${escapeHTML(tgtLabel)}</strong><br><span style="font-size:11px;color:#64748b;" class="num">UTR: ${escapeHTML(u.utr || '—')}</span></td>
-              <td style="border:1px solid #cbd5e1;padding:8px;text-align:right;font-weight:800;color:#1d4ed8;" class="num">${formatINR(amt)}</td>
-              <td style="border:1px solid #cbd5e1;padding:8px;text-align:right;font-weight:700;" class="num">${formatINR(runningTotal)}</td>
-            </tr>`;
-          }).join('');
-
+      const openEntries = [...(party.upiHisab || []).filter(u => u.status === 'OPEN')].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      const tbl = buildUpiStatementTable(openEntries, party, true);
       document.getElementById('pdfPrintArea').innerHTML = `
         <div style="color:#0f172a;">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:2px solid #0f172a;padding-bottom:14px;margin-bottom:16px;">
             <div>
               <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:#1d4ed8;">Party Hisab Book • Current Open UPI Ledger</div>
               <h1 style="font-size:22px;font-weight:800;margin:4px 0 0 0;">${escapeHTML(party.name)}</h1>
-              <div style="font-size:12px;color:#475569;">${escapeHTML(party.contact || '')} • ${escapeHTML(party.city || '')}</div>
+              <div style="font-size:12px;color:#475569;">${escapeHTML([party.contact, party.city].filter(Boolean).join(' • '))}</div>
             </div>
             <div style="text-align:right;font-size:12px;">
               <div style="padding:5px 10px;border-radius:8px;background:#1d4ed8;color:#ffffff;font-weight:800;display:inline-block;">OPEN UPI LEDGER</div>
-              <div style="color:#475569;margin-top:6px;font-weight:600;" class="num">Total: ${formatINR(runningTotal)}</div>
+              <div style="color:#475569;margin-top:6px;font-weight:600;" class="num">Total: ${formatINR(tbl.total)}</div>
             </div>
           </div>
-          <table style="width:100%;border-collapse:collapse;border:1px solid #cbd5e1;font-size:12px;">
-            <thead>
-              <tr style="background:#f1f5f9;">
-                <th style="border:1px solid #cbd5e1;padding:8px;text-align:left;">#</th>
-                <th style="border:1px solid #cbd5e1;padding:8px;text-align:left;">Date</th>
-                <th style="border:1px solid #cbd5e1;padding:8px;text-align:left;">Paid To &amp; UPI</th>
-                <th style="border:1px solid #cbd5e1;padding:8px;text-align:left;">Target &amp; UTR</th>
-                <th style="border:1px solid #cbd5e1;padding:8px;text-align:right;">Amount (₹)</th>
-                <th style="border:1px solid #cbd5e1;padding:8px;text-align:right;">Running Total (₹)</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rowsHtml}
-              <tr style="background:#0f172a;color:#ffffff;font-weight:800;">
-                <td colspan="4" style="border:1px solid #0f172a;padding:8px;text-align:right;">Total Open UPI Payments</td>
-                <td style="border:1px solid #0f172a;padding:8px;text-align:right;" class="num">${formatINR(runningTotal)}</td>
-                <td style="border:1px solid #0f172a;padding:8px;text-align:right;" class="num">${formatINR(runningTotal)}</td>
-              </tr>
-            </tbody>
-          </table>
+          ${tbl.html}
         </div>`;
       window.openModal('pdfModal');
     };
@@ -2279,7 +2345,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             <div>
               <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:#6d28d9;">Party Hisab Book • Combined Third-Party Target Ledger</div>
               <h1 style="font-size:22px;font-weight:800;margin:4px 0 0 0;">${escapeHTML(party.name)}</h1>
-              <div style="font-size:12px;color:#475569;">${escapeHTML(party.contact || '')} • ${escapeHTML(party.city || '')}</div>
+              <div style="font-size:12px;color:#475569;">${escapeHTML([party.contact, party.city].filter(Boolean).join(' • '))}</div>
             </div>
             <div style="text-align:right;font-size:12px;">
               <div style="padding:5px 10px;border-radius:8px;background:#0f172a;color:#ffffff;font-weight:800;display:inline-block;">${escapeHTML(overallStatus)}</div>
@@ -2291,7 +2357,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             <div style="padding:12px;border-radius:12px;background:#0f172a;color:#ffffff;"><div style="font-size:10px;font-weight:800;color:#6ee7b7;">NET POSITION</div><div style="font-size:14px;font-weight:800;margin-top:4px;" class="num">${escapeHTML(overallStatus)}</div></div>
           </div>
           ${recon.map((r, idx) => `<div style="border:1px solid #cbd5e1;border-radius:12px;padding:12px;margin-bottom:10px;font-size:12px;display:flex;justify-content:space-between;align-items:center;">
-            <div><strong>#${idx + 1} ${escapeHTML(cleanChipNameOnly(r.name) || r.name)}</strong> <span style="color:#64748b;">(${escapeHTML(r.upiId || '')})</span></div>
+            <div><strong style="font-size:13px;">#${idx + 1} ${escapeHTML(realName(r.name) || 'Payee')}</strong>${r.upiId ? '<br><span style="font-size:11px;color:#64748b;">' + escapeHTML(r.upiId) + '</span>' : ''}</div>
             <div class="num">Target: <strong>${formatINR(r.targetAmount)}</strong> • Paid: <strong style="color:#1d4ed8;">${formatINR(r.paid)}</strong></div>
           </div>`).join('')}
         </div>`;
@@ -2317,8 +2383,10 @@ function saveProofToDrive(partyName, fileName, base64Data) {
 
     function renderUpiFinalizedBatchPDF(batchTarget, customMsg, attachScreenshots) {
       const party = getActiveParty();
-      const entries = (party.upiHisab || []).filter(u => batchTarget !== 'OPEN' ? u.batchId === batchTarget : u.status === 'OPEN');
-      const totalPaid = entries.reduce((s, u) => s + (Number(u.amount) || 0), 0);
+      const entries = (party.upiHisab || []).filter(u => batchTarget !== 'OPEN' ? u.batchId === batchTarget : u.status === 'OPEN')
+        .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      const tbl = buildUpiStatementTable(entries, party, false);
+      const withPhotos = entries.filter(u => u.proofImg && !String(u.proofImg).startsWith('data:image/svg+xml'));
       document.getElementById('pdfPrintArea').innerHTML = `
         <div style="color:#0f172a;">
           <div style="border-bottom:2px solid #0f172a;padding-bottom:12px;margin-bottom:14px;">
@@ -2326,14 +2394,8 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             <h1 style="font-size:20px;font-weight:800;margin:4px 0 0 0;">${escapeHTML(party.name)}</h1>
             <div style="font-size:12px;color:#475569;margin-top:4px;">${escapeHTML(customMsg)}</div>
           </div>
-          <table style="width:100%;border-collapse:collapse;border:1px solid #cbd5e1;font-size:12px;">
-            <thead><tr style="background:#f1f5f9;"><th style="border:1px solid #cbd5e1;padding:8px;text-align:left;">Date</th><th style="border:1px solid #cbd5e1;padding:8px;text-align:left;">Paid To</th><th style="border:1px solid #cbd5e1;padding:8px;text-align:left;">UTR</th><th style="border:1px solid #cbd5e1;padding:8px;text-align:right;">Amount (₹)</th></tr></thead>
-            <tbody>
-              ${entries.map(u => `<tr><td style="border:1px solid #cbd5e1;padding:8px;" class="num">${formatShortDate(u.date)}</td><td style="border:1px solid #cbd5e1;padding:8px;"><strong>${escapeHTML(cleanChipNameOnly(u.payeeName) || u.payeeName)}</strong></td><td style="border:1px solid #cbd5e1;padding:8px;" class="num">${escapeHTML(u.utr || '—')}</td><td style="border:1px solid #cbd5e1;padding:8px;text-align:right;font-weight:800;" class="num">${formatINR(u.amount)}</td></tr>`).join('')}
-              <tr style="background:#0f172a;color:#ffffff;font-weight:800;"><td colspan="3" style="border:1px solid #0f172a;padding:8px;text-align:right;">Total</td><td style="border:1px solid #0f172a;padding:8px;text-align:right;" class="num">${formatINR(totalPaid)}</td></tr>
-            </tbody>
-          </table>
-          ${attachScreenshots && entries.some(u => u.proofImg) ? `<div style="margin-top:16px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">${entries.filter(u => u.proofImg).map(u => `<div style="border:1px solid #cbd5e1;border-radius:10px;padding:8px;"><img src="${u.proofImg}" alt="Proof" style="width:100%;height:160px;object-fit:contain;"><div style="font-size:11px;font-weight:800;margin-top:6px;">${escapeHTML(cleanChipNameOnly(u.payeeName) || u.payeeName)} — ${formatINR(u.amount)}</div></div>`).join('')}</div>` : ''}
+          ${tbl.html}
+          ${attachScreenshots && withPhotos.length ? `<div style="margin-top:16px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">${withPhotos.map(u => `<div style="border:1px solid #cbd5e1;border-radius:10px;padding:8px;"><img src="${u.proofImg}" alt="Proof" style="width:100%;height:160px;object-fit:contain;"><div style="font-size:11px;font-weight:800;margin-top:6px;">${escapeHTML(payeeNameOf(u, party))} — ${formatINR(u.amount)}</div></div>`).join('')}</div>` : ''}
         </div>`;
       window.openModal('pdfModal');
     }
@@ -2341,7 +2403,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
     window.generateMainStatementPDF = function () {
       const party = getActiveParty();
       const m = getPartyMetrics(party);
-      const sorted = [...m.activeEntries].sort((a, b) => a.date.localeCompare(b.date));
+      const sorted = [...m.activeEntries].sort((a, b) => String(a.date).localeCompare(String(b.date)));
       let running = 0;
       document.getElementById('pdfPrintArea').innerHTML = `
         <div style="color:#0f172a;">
@@ -2349,7 +2411,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             <div style="font-size:11px;font-weight:800;color:#4338ca;text-transform:uppercase;">Party Hisab Book • Main Party Statement</div>
             <h1 style="font-size:20px;font-weight:800;margin:4px 0 0 0;">${escapeHTML(party.name)}</h1>
           </div>
-          <table style="width:100%;border-collapse:collapse;border:1px solid #cbd5e1;font-size:12px;">
+          <div class="stmt-scroll"><table class="stmt-table" style="width:100%;min-width:600px;table-layout:fixed;border-collapse:collapse;border:1px solid #cbd5e1;font-size:12px;"><colgroup><col style="width:14%"><col style="width:46%"><col style="width:20%"><col style="width:20%"></colgroup>
             <thead><tr style="background:#f1f5f9;"><th style="border:1px solid #cbd5e1;padding:8px;text-align:left;">Date</th><th style="border:1px solid #cbd5e1;padding:8px;text-align:left;">Particulars</th><th style="border:1px solid #cbd5e1;padding:8px;text-align:right;">Amount (₹)</th><th style="border:1px solid #cbd5e1;padding:8px;text-align:right;">Balance O/S</th></tr></thead>
             <tbody>${sorted.map(e => {
               const amt = Number(e.amount) || 0;
@@ -2357,7 +2419,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
               running += isCredit ? amt : -amt;
               return `<tr><td style="border:1px solid #cbd5e1;padding:8px;" class="num">${formatShortDate(e.date)}</td><td style="border:1px solid #cbd5e1;padding:8px;">${escapeHTML(e.narration)}</td><td style="border:1px solid #cbd5e1;padding:8px;text-align:right;font-weight:700;" class="num">${isCredit ? '+' : '-'}${formatINR(amt)}</td><td style="border:1px solid #cbd5e1;padding:8px;text-align:right;font-weight:800;" class="num">${formatINR(running)}</td></tr>`;
             }).join('')}</tbody>
-          </table>
+          </table></div>
         </div>`;
       window.openModal('pdfModal');
     };
