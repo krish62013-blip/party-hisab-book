@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Party Hisab Book</title>
+  <title>Party Hisab Book • v5</title>
   <meta name="theme-color" content="#4f46e5" />
   <meta name="mobile-web-app-capable" content="yes" />
   <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Party%20Hisab%20Book%22%2C%22short_name%22%3A%22Party%20Hisab%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23060913%22%2C%22theme_color%22%3A%22%234f46e5%22%7D" />
@@ -3284,6 +3284,19 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       return t.name || t.upiId || 'Target Payee';
     }
 
+    function isValidPayeeNameOnly(val) {
+      const s = String(val || '').trim();
+      if (!s) return false;
+      // Reject pure numbers, phone numbers, amounts, currency strings, and scanner/status words
+      if (/^[₹$]?\s*[0-9,]+(\.[0-9]+)?$/.test(s)) return false;
+      if (/^\d{4,}$/.test(s)) return false;
+      if (/^(open|closed|finalized|clubbed|scanner|sanner|na|null|undefined)$/i.test(s)) return false;
+      if (/^scanner\b/i.test(s) || /^sanner\b/i.test(s)) return false;
+      // Must contain at least two letters so it is an actual name
+      if (!/[a-zA-Z]{2,}/.test(s)) return false;
+      return true;
+    }
+
     function populateTargetDropdownInUpiModal(selectedId) {
       const party = getActiveParty();
       const sel = document.getElementById('inpUpiAllocateTarget');
@@ -3298,24 +3311,61 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         })
       ].join('');
 
-      const seenLabels = new Set();
-      const uniqueChips = [];
-      activeTargets.forEach(t => {
-        const label = getTargetDisplayName(t);
-        const key = label.toLowerCase();
-        if (!seenLabels.has(key)) {
-          seenLabels.add(key);
-          uniqueChips.push({ target: t, label });
+      const seenNames = new Set();
+      const nameChips = [];
+
+      // Collect names ONLY from entries that have a date AND a written payee name & UPI/identifier
+      (party.upiHisab || []).forEach(u => {
+        const hasDate = Boolean(String(u.date || '').trim());
+        const hasUpiOrRef = Boolean(String(u.payeeUpi || u.upiId || '').trim());
+        const pName = String(u.payeeName || u.name || '').trim();
+        if (hasDate && hasUpiOrRef && isValidPayeeNameOnly(pName)) {
+          const key = pName.toLowerCase();
+          if (!seenNames.has(key)) {
+            seenNames.add(key);
+            nameChips.push({
+              targetId: u.allocatedTargetId || '',
+              name: pName,
+              upiId: u.payeeUpi || u.upiId || ''
+            });
+          }
         }
       });
 
-      chips.innerHTML = uniqueChips.map(({ target: t, label }) => `
-        <button type="button" onclick="window.selectQuickTargetChip('${t.id}')"
+      // Also include valid target names that have a date and UPI
+      activeTargets.forEach(t => {
+        const hasDate = Boolean(String(t.date || '').trim());
+        const hasUpiOrRef = Boolean(String(t.upiId || '').trim());
+        const tName = getTargetDisplayName(t);
+        if (hasDate && hasUpiOrRef && isValidPayeeNameOnly(tName)) {
+          const key = tName.toLowerCase();
+          if (!seenNames.has(key)) {
+            seenNames.add(key);
+            nameChips.push({
+              targetId: t.id,
+              name: tName,
+              upiId: t.upiId || ''
+            });
+          }
+        }
+      });
+
+      chips.innerHTML = nameChips.map(c => `
+        <button type="button" onclick="window.selectQuickPayeeChip('${escapeHTML(c.targetId)}', '${escapeHTML(c.name)}', '${escapeHTML(c.upiId)}')"
           class="px-2.5 py-1 rounded-full bg-indigo-600/15 hover:bg-indigo-600 hover:text-white text-indigo-600 text-[11px] font-extrabold transition cursor-pointer">
-          ${escapeHTML(label)}
+          ${escapeHTML(c.name)}
         </button>
       `).join('');
     }
+
+    window.selectQuickPayeeChip = function (targetId, name, upiId) {
+      if (targetId) {
+        window.selectQuickTargetChip(targetId);
+        return;
+      }
+      if (name) document.getElementById('inpUpiName').value = name;
+      if (upiId) document.getElementById('inpUpiId').value = upiId;
+    };
 
     window.selectQuickTargetChip = function (targetId) {
       const party = getActiveParty();
