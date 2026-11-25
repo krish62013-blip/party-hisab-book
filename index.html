@@ -580,10 +580,11 @@
 
           <!-- Desktop Header Bar -->
           <div class="hidden lg:grid lg:grid-cols-12 gap-3 px-4 py-2.5 surface-subtle border-b text-[11px] font-extrabold uppercase tracking-wider theme-text-faint">
-            <div class="col-span-4">Date &amp; Paid To (Actual Name &amp; UPI)</div>
+            <div class="col-span-3">Date &amp; Paid To (Actual Name &amp; UPI)</div>
             <div class="col-span-3">Allocated Target Party</div>
             <div class="col-span-2">App &amp; UTR</div>
             <div class="col-span-1 text-right">Amount</div>
+            <div class="col-span-1 text-center">Proof</div>
             <div class="col-span-2 text-right">Actions</div>
           </div>
 
@@ -639,10 +640,11 @@
 
           <!-- Desktop Header Bar -->
           <div class="hidden lg:grid lg:grid-cols-12 gap-3 px-4 py-2.5 surface-subtle border-b text-[11px] font-extrabold uppercase tracking-wider theme-text-faint">
-            <div class="col-span-4">Date &amp; Target Payee (Name &amp; UPI)</div>
+            <div class="col-span-3">Date &amp; Target Payee (Name &amp; UPI)</div>
             <div class="col-span-2 text-right">Target Amount</div>
             <div class="col-span-2 text-right">Paid (Allocated)</div>
             <div class="col-span-2 text-right">Balance &amp; Status</div>
+            <div class="col-span-1 text-center">Proof</div>
             <div class="col-span-2 text-right">Actions</div>
           </div>
 
@@ -2263,16 +2265,19 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       showToast('Disconnected');
     };
 
-    // Preserve local SVG/base64 previews if cloud row only stored Drive URL or empty
+    // Preserve local uploaded base64/Drive proofs when pulling from Sheet
     function mergeCloudWithLocalProofs(cloudData, localData) {
-      if (!localData || !Array.isArray(localData.parties)) return cloudData;
       const localMap = {};
-      localData.parties.forEach(p => {
-        (p.mainLedger || []).forEach(m => { if (m.proofImg) localMap[m.id] = m.proofImg; });
-        (p.upiHisab || []).forEach(u => { if (u.proofImg) localMap[u.id] = u.proofImg; });
-      });
+      if (localData && Array.isArray(localData.parties)) {
+        localData.parties.forEach(p => {
+          (p.mainLedger || []).forEach(m => { if (m.proofImg) localMap[m.id] = m.proofImg; });
+          (p.upiHisab || []).forEach(u => { if (u.proofImg) localMap[u.id] = u.proofImg; });
+        });
+      }
       cloudData.parties.forEach(p => {
-        (p.mainLedger || []).forEach(m => { if (!m.proofImg && localMap[m.id]) m.proofImg = localMap[m.id]; });
+        (p.mainLedger || []).forEach(m => {
+          if (!m.proofImg && localMap[m.id]) m.proofImg = localMap[m.id];
+        });
         (p.upiHisab || []).forEach(u => {
           if (!u.proofImg && localMap[u.id]) u.proofImg = localMap[u.id];
           if (!u.proofImg) u.proofImg = makeReceiptSVG('UPI', `${u.payeeName || 'Payee'} (${u.payeeUpi || ''})`, formatINR(u.amount || 0), formatShortDate(u.date || ''), u.utr || u.id, u.appMode || 'UPI');
@@ -2327,16 +2332,34 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       const url = getGasWebAppUrl();
       if (!url || !compressedDataUrl || !compressedDataUrl.startsWith('data:')) return null;
       try {
-        updateCloudSyncBadge('SYNCING', 'Uploading proof...');
-        await formPostRequest(url, {
-          action: 'UPLOAD_PROOF',
-          partyName,
-          fileName,
-          base64Data: compressedDataUrl
+        updateCloudSyncBadge('SYNCING', 'Uploading proof to Drive...');
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'UPLOAD_PROOF',
+            partyName,
+            fileName,
+            base64Data: compressedDataUrl
+          })
         });
+        const text = await resp.text();
+        const json = JSON.parse(text);
         updateCloudSyncBadge('CONNECTED');
+        if (json && json.ok && json.url) {
+          return json.url;
+        }
       } catch (e) {
-        updateCloudSyncBadge('ERROR');
+        // Fallback to hidden form post if CORS blocks reading response; local compressed image still renders immediately
+        try {
+          await formPostRequest(url, {
+            action: 'UPLOAD_PROOF',
+            partyName,
+            fileName,
+            base64Data: compressedDataUrl
+          });
+        } catch (err2) {}
+        updateCloudSyncBadge('CONNECTED');
       }
       return null;
     }
@@ -2922,10 +2945,19 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             </select>`
           : `<span class="text-xs font-bold theme-text-muted">${allocatedObj ? escapeHTML(allocatedObj.name) : 'Batch Settled'}</span>`;
 
+        const hasRealPhoto = u.proofImg && !String(u.proofImg).startsWith('data:image/svg+xml');
+        const proofCellBtn = hasRealPhoto
+          ? `<button type="button" onclick="window.openUpiProof('${u.id}')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-extrabold cursor-pointer shadow-2xs inline-flex items-center gap-1">
+               <span>View SS</span>
+             </button>`
+          : `<button type="button" onclick="window.openUpiProof('${u.id}')" class="px-2.5 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-[11px] font-extrabold cursor-pointer">
+               <span>Receipt</span>
+             </button>`;
+
         return `
           <div class="p-4 surface-row transition grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:items-center">
-            <!-- Col 1-4: Date & Actual Payee -->
-            <div class="lg:col-span-4 min-w-0">
+            <!-- Col 1-3: Date & Actual Payee -->
+            <div class="lg:col-span-3 min-w-0">
               <div class="flex flex-wrap items-center gap-1.5">
                 <span class="text-[11px] font-extrabold theme-text-faint num">${formatShortDate(u.date)}</span>
                 ${statusTag}
@@ -2935,28 +2967,33 @@ function saveProofToDrive(partyName, fileName, base64Data) {
               <div class="text-[11px] font-semibold theme-text-faint break-all">${escapeHTML(u.payeeUpi)} ${u.note ? '• ' + escapeHTML(u.note) : ''}</div>
             </div>
 
-            <!-- Col 5-7: Allocated Target Party -->
+            <!-- Col 4-6: Allocated Target Party -->
             <div class="lg:col-span-3">
               <div class="lg:hidden text-[10px] font-extrabold uppercase text-purple-600 mb-1">Allocated Target Party</div>
               ${allocateControl}
             </div>
 
-            <!-- Col 8-9: App & UTR -->
+            <!-- Col 7-8: App & UTR -->
             <div class="lg:col-span-2 text-xs">
               <div class="font-bold theme-text-main">${escapeHTML(u.appMode || 'UPI')}</div>
               <div class="text-[11px] theme-text-faint num break-all">UTR: ${escapeHTML(u.utr || '—')}</div>
             </div>
 
-            <!-- Col 10: Amount -->
+            <!-- Col 9: Amount -->
             <div class="lg:col-span-1 flex items-center justify-between lg:justify-end">
               <span class="lg:hidden text-xs font-bold theme-text-faint">Amount:</span>
               <span class="font-extrabold text-sm text-blue-600 num">${formatINR(amt)}</span>
             </div>
 
+            <!-- Col 10: Proof Column -->
+            <div class="lg:col-span-1 flex items-center justify-between lg:justify-center">
+              <span class="lg:hidden text-xs font-bold theme-text-faint">Proof:</span>
+              ${proofCellBtn}
+            </div>
+
             <!-- Col 11-12: Actions -->
             <div class="lg:col-span-2 flex flex-wrap items-center justify-end gap-1.5">
-              ${u.proofImg ? `<button type="button" onclick="window.openUpiProof('${u.id}')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-[11px] font-extrabold cursor-pointer">Proof</button>` : ''}
-              ${u.status === 'OPEN' ? `<button type="button" onclick="window.openEditUpiModal('${u.id}')" class="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-extrabold cursor-pointer">Edit</button>` : ''}
+              ${u.status === 'OPEN' ? `<button type="button" onclick="window.openEditUpiModal('${u.id}')" class="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-extrabold cursor-pointer">Edit / Upload SS</button>` : ''}
             </div>
           </div>
         `;
@@ -3103,9 +3140,16 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             ? `<button type="button" onclick="window.openFinalizeModalForTarget('${r.id}')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-extrabold cursor-pointer">Finalize &amp; Push</button>`
             : '';
 
+          const realPhotoEntries = r.matchedEntries.filter(u => u.proofImg && !String(u.proofImg).startsWith('data:image/svg+xml'));
+          const targetProofBtn = realPhotoEntries.length > 0
+            ? `<button type="button" onclick="window.openUpiProof('${realPhotoEntries[realPhotoEntries.length - 1].id}')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-extrabold cursor-pointer">View SS (${realPhotoEntries.length})</button>`
+            : (r.matchedEntries.length > 0
+                ? `<button type="button" onclick="window.openUpiProof('${r.matchedEntries[r.matchedEntries.length - 1].id}')" class="px-2.5 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-[11px] font-extrabold cursor-pointer">Receipt (${r.matchedEntries.length})</button>`
+                : `<span class="text-[11px] theme-text-faint">—</span>`);
+
           return `
             <div class="p-4 surface-row transition grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:items-center">
-              <div class="lg:col-span-4 min-w-0">
+              <div class="lg:col-span-3 min-w-0">
                 <div class="flex flex-wrap items-center gap-1.5">
                   <span class="text-[11px] font-extrabold theme-text-faint num">${formatShortDate(r.date)}</span>
                   ${badge}
@@ -3133,6 +3177,11 @@ function saveProofToDrive(partyName, fileName, base64Data) {
               <div class="lg:col-span-2 flex items-center justify-between lg:justify-end">
                 <span class="lg:hidden text-xs font-bold theme-text-faint">Balance:</span>
                 <div class="text-xs">${balText}</div>
+              </div>
+
+              <div class="lg:col-span-1 flex items-center justify-between lg:justify-center">
+                <span class="lg:hidden text-xs font-bold theme-text-faint">Proof:</span>
+                ${targetProofBtn}
               </div>
 
               <div class="lg:col-span-2 flex flex-wrap items-center justify-end gap-1.5">
@@ -3199,6 +3248,22 @@ function saveProofToDrive(partyName, fileName, base64Data) {
     }
 
     // ==================== ADD / EDIT UPI PAYMENT ====================
+    function getTargetDisplayName(t) {
+      const rawName = String(t.name || '').trim();
+      const rawNote = String(t.note || '').trim();
+      const rawUpi = String(t.upiId || '').trim();
+      if (rawName && !/^\d{7,}$/.test(rawName) && !/^scanner/i.test(rawName) && !/^sanner/i.test(rawName)) {
+        return rawName;
+      }
+      if (rawNote && !/^\d{7,}$/.test(rawNote) && !/^OPEN$/i.test(rawNote)) {
+        return rawNote;
+      }
+      if (rawUpi && !/^\d{7,}$/.test(rawUpi)) {
+        return rawUpi;
+      }
+      return rawName || rawUpi || rawNote || 'Target Payee';
+    }
+
     function populateTargetDropdownInUpiModal(selectedId) {
       const party = getActiveParty();
       const sel = document.getElementById('inpUpiAllocateTarget');
@@ -3207,13 +3272,27 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       const activeTargets = (party.upiTargets || []).filter(t => t.status !== 'FINALIZED' && !t.batchId);
       sel.innerHTML = [
         `<option value="">-- Unassigned / Direct Payout --</option>`,
-        ...activeTargets.map(t => `<option value="${t.id}" ${t.id === selectedId ? 'selected' : ''}>${escapeHTML(t.name)} (Target: ${formatINR(t.targetAmount)})</option>`)
+        ...activeTargets.map(t => {
+          const label = getTargetDisplayName(t);
+          return `<option value="${t.id}" ${t.id === selectedId ? 'selected' : ''}>${escapeHTML(label)} (${escapeHTML(t.upiId || '')} • ${formatINR(t.targetAmount)})</option>`;
+        })
       ].join('');
 
-      chips.innerHTML = activeTargets.map(t => `
+      const seenLabels = new Set();
+      const uniqueChips = [];
+      activeTargets.forEach(t => {
+        const label = getTargetDisplayName(t);
+        const key = label.toLowerCase();
+        if (!seenLabels.has(key)) {
+          seenLabels.add(key);
+          uniqueChips.push({ target: t, label });
+        }
+      });
+
+      chips.innerHTML = uniqueChips.map(({ target: t, label }) => `
         <button type="button" onclick="window.selectQuickTargetChip('${t.id}')"
           class="px-2.5 py-1 rounded-full bg-indigo-600/15 hover:bg-indigo-600 hover:text-white text-indigo-600 text-[11px] font-extrabold transition cursor-pointer">
-          ${escapeHTML(t.name)}
+          ${escapeHTML(label)}
         </button>
       `).join('');
     }
@@ -3222,7 +3301,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       const party = getActiveParty();
       const t = party.upiTargets.find(x => x.id === targetId);
       if (!t) return;
-      document.getElementById('inpUpiName').value = t.name;
+      document.getElementById('inpUpiName').value = getTargetDisplayName(t);
       document.getElementById('inpUpiId').value = t.upiId;
       document.getElementById('inpUpiAllocateTarget').value = t.id;
     };
