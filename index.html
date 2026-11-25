@@ -1867,31 +1867,46 @@ function saveProofToDrive(partyName, fileName, base64Data) {
     function mapMainEntryObj(m, pid) {
       const amt = pickNumericAmount(m, ['amount', 'Amount', 'type', 'Type', 'mode', 'Bank_Details']);
       const rawTypeStr = String(m.rawType || m.type || m.Type || '').toUpperCase();
+      const rawDateStr = String(m.date || m.Date || '').toUpperCase();
       const modeStr = String(m.mode || m.bankDetails || m.Bank_Details || '').toUpperCase();
       const narrStr = String(m.notes || m.narration || m.Narration || '').toUpperCase();
+      const combinedText = (modeStr + ' ' + narrStr + ' ' + rawDateStr + ' ' + rawTypeStr).toUpperCase();
       const bId = String(m.batchId || m.Batch_ID || '');
 
-      let t = 'RECEIVED';
-      if (rawTypeStr === 'OS_BF') {
+      let t = 'CASH_RETURN';
+      if (rawTypeStr === 'OS_BF' || rawDateStr === 'OS_BF') {
         t = 'OS_BF';
       } else if (bId.startsWith('BATCH') || modeStr.includes('UPI BATCH')) {
         t = 'UPI_CLUB';
-      } else if (rawTypeStr === 'RECEIVED' || narrStr.includes('RECEIVED') || narrStr.includes('BALANCE BROUGHT')) {
+      } else if (
+        rawTypeStr === 'RECEIVED' ||
+        rawDateStr === 'RECEIVED' ||
+        combinedText.includes('RECEIVED') ||
+        combinedText.includes('BALANCE BROUGHT') ||
+        combinedText.includes('BROUGHT') ||
+        combinedText.includes('ADVANCE') ||
+        combinedText.includes('DEPOSIT')
+      ) {
         t = 'RECEIVED';
-      } else if (rawTypeStr === 'RETURNED' || rawTypeStr === 'CASH_RETURN' || narrStr.includes('RETURN') || narrStr.includes('CASH') || narrStr.includes('PAID')) {
+      } else if (rawTypeStr === 'RETURNED' || rawDateStr === 'RETURNED' || rawTypeStr === 'CASH_RETURN') {
         t = 'CASH_RETURN';
-      } else if (/^\d+$/.test(rawTypeStr)) {
-        // When columns are shifted, the first main ledger entry (e.g., 12534591 Balance brought) is RECEIVED
-        t = (narrStr.includes('BROUGHT') || narrStr.includes('ADVANCE') || narrStr.includes('DEPOSIT')) ? 'RECEIVED' : 'CASH_RETURN';
       }
+
+      const displayDate = /^\d{4}-\d{2}-\d{2}/.test(rawDateStr)
+        ? rawDateStr.slice(0, 10)
+        : (String(m.proofUrl || m.proofImg || m.Proof_URL || '').slice(0, 10) || '2026-11-23');
+
+      const displayNarration = String(m.notes || m.narration || m.Narration || '')
+        || (modeStr && !/^\d+$/.test(modeStr) ? String(m.mode || m.bankDetails || m.Bank_Details || '') : '')
+        || (t === 'RECEIVED' ? 'Opening / Balance Brought' : 'Ledger Entry');
 
       return {
         id: String(m.id || m.Txn_ID || ('M-' + Math.random().toString(36).slice(2, 7))),
-        date: String(m.date || m.Date || '').slice(0, 10),
+        date: displayDate,
         type: t,
         amount: amt,
         bankDetails: String(m.mode || m.bankDetails || m.Bank_Details || ''),
-        narration: String(m.notes || m.narration || m.Narration || ''),
+        narration: displayNarration,
         batchId: bId ? bId : null,
         settlementId: (m.settlementId || m.Settlement_ID) ? String(m.settlementId || m.Settlement_ID) : null,
         proofImg: (m.proofUrl || m.proofImg || m.Proof_URL) ? String(m.proofUrl || m.proofImg || m.Proof_URL) : null
@@ -2008,9 +2023,12 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             const mapped = rawMain.map(m => mapMainEntryObj(m, pid));
             const hasReceived = mapped.some(x => x.type === 'RECEIVED');
             if (!hasReceived && mapped.length > 0) {
-              const bfIdx = mapped.findIndex(x => x.type !== 'UPI_CLUB' && /brought|received|deposit|opening/i.test(x.narration));
+              const bfIdx = mapped.findIndex(x => x.type !== 'UPI_CLUB' && /brought|received|deposit|opening|hisab hua/i.test(x.narration + ' ' + x.bankDetails));
               if (bfIdx !== -1) {
                 mapped[bfIdx].type = 'RECEIVED';
+              } else {
+                const firstNonBatchIdx = mapped.findIndex(x => x.type !== 'UPI_CLUB' && x.amount > 0);
+                if (firstNonBatchIdx !== -1) mapped[firstNonBatchIdx].type = 'RECEIVED';
               }
             }
             return mapped;
