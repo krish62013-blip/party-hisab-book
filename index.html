@@ -2470,6 +2470,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
     function mainRange() { return (mainFrom || mainTo) ? { from: mainFrom, to: mainTo } : null; }
     makeDateFilter('upi', () => window.renderUpiPayoutsTable());
     makeDateFilter('main', () => renderMainLedger());
+    function nextDay(d) { try { const x = new Date(String(d).slice(0, 10) + 'T00:00:00'); x.setDate(x.getDate() + 1); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); } catch (e) { return d; } }
     function inRange(d, from, to) { d = String(d || '').slice(0, 10); return (!from || d >= from) && (!to || d <= to); }
     function reconRange() { return (reconFrom || reconTo) ? { from: reconFrom, to: reconTo } : null; }
     function periodLabel(r) { return r ? `${r.from ? formatShortDate(r.from) : 'Start'} → ${r.to ? formatShortDate(r.to) : 'Today'}` : ''; }
@@ -2478,8 +2479,10 @@ function saveProofToDrive(partyName, fileName, base64Data) {
 
     // range (optional): only payees with a target date or payment date in the period; payments limited to the period.
     // All target dates of an included payee are kept, so a payee given targets on 2 dates shows both.
+    // range = TARGET-DATE period: only target dates inside the period are counted, and every payment that
+    // (oldest-target-first) falls against those dates is counted too — even if it was paid after the period ends.
     function computeTargetReconciliation(party, range) {
-      const openEntries = (party.upiHisab || []).filter(u => u.status === 'OPEN' && (!range || inRange(u.date, range.from, range.to)));
+      const openEntries = (party.upiHisab || []).filter(u => u.status === 'OPEN');
       const targets = (party.upiTargets || []).filter(t => t.status !== 'FINALIZED' && !t.batchId);
       const groupMap = new Map();
       targets.forEach(t => {
@@ -2493,11 +2496,18 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         const primary = sorted[0];
         const ids = new Set(sorted.map(x => x.id));
         const combinedTarget = sorted.reduce((s, x) => s + (Number(x.targetAmount) || 0), 0);
-        const matched = openEntries.filter(u => ids.has(u.allocatedTargetId));
-        const paid = matched.reduce((acc, u) => acc + (Number(u.amount) || 0), 0);
-        const diff = paid - combinedTarget;
-        if (range && !matched.length && !sorted.some(t => inRange(t.date, range.from, range.to))) return;
-        out.push({ ...primary, tranches: sorted, isMultiDate: sorted.length > 1, targetAmount: combinedTarget, paid, diff, status: diff < 0 ? 'SHORT' : diff > 0 ? 'EXCESS' : 'FULFILLED', matchedEntries: matched });
+        const matchedAll = openEntries.filter(u => ids.has(u.allocatedTargetId));
+        const allSlots = fifoAllocate(sorted, matchedAll);
+        const slots = range ? allSlots.filter(sl => inRange(sl.t.date, range.from, range.to)) : allSlots;
+        if (range && !slots.length) return;
+        const tr = slots.map(sl => sl.t);
+        const target = slots.reduce((a, sl) => a + sl.target, 0);
+        const paid = slots.reduce((a, sl) => a + sl.paid, 0);
+        const seen = new Set();
+        const matched = [];
+        slots.forEach(sl => sl.items.forEach(it => { if (!seen.has(it.u.id)) { seen.add(it.u.id); matched.push(it.u); } }));
+        const diff = paid - target;
+        out.push({ ...primary, tranches: tr, allTranches: sorted, slots, allSlots, isMultiDate: sorted.length > 1, targetAmount: target, paid, diff, status: diff < 0 ? 'SHORT' : diff > 0 ? 'EXCESS' : 'FULFILLED', matchedEntries: matched });
       });
       return out;
     }
@@ -2528,7 +2538,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
               ? proofThumbsHtml(r.matchedEntries, 'openUpiProof', '')
               : (r.matchedEntries.length > 0 ? `<button type="button" onclick="window.openUpiProof('${r.matchedEntries[r.matchedEntries.length - 1].id}')" class="px-2.5 py-1.5 rounded-lg bg-slate-700 text-white text-xs font-extrabold cursor-pointer">Receipt</button>` : `<span class="text-xs theme-text-faint">—</span>`);
             return `<div class="p-4 surface-row grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:items-center">
-              <div class="lg:col-span-3"><div class="font-extrabold text-sm">${escapeHTML(r.name)} ${r.isMultiDate ? `<span class="chip chip-blue">${r.tranches.length} dates</span>` : ''}</div><div class="text-xs theme-text-faint">${escapeHTML(r.upiId)}</div><div class="mt-1 flex flex-wrap gap-1">${fifoAllocate(r.tranches, r.matchedEntries).map(sl => `<span class="chip ${sl.paid >= sl.target ? 'chip-emerald' : (sl.paid > 0 ? 'chip-amber' : 'chip-slate')} num">🎯 ${formatShortDate(sl.t.date)} • ${formatINR(sl.target)}${r.isMultiDate ? ` • paid ${formatINR(sl.paid)}` : ''}</span>`).join('')}</div></div>
+              <div class="lg:col-span-3"><div class="font-extrabold text-sm">${escapeHTML(r.name)} ${r.isMultiDate ? `<span class="chip chip-blue">${(r.allTranches || r.tranches).length} target dates${r.tranches.length < (r.allTranches || r.tranches).length ? ' (' + r.tranches.length + ' in period)' : ''}</span>` : ''}</div><div class="text-xs theme-text-faint">${escapeHTML(r.upiId)}</div><div class="mt-1 flex flex-wrap gap-1">${r.slots.map(sl => `<span class="chip ${sl.paid >= sl.target ? 'chip-emerald' : (sl.paid > 0 ? 'chip-amber' : 'chip-slate')} num">🎯 ${formatShortDate(sl.t.date)} • ${formatINR(sl.target)}${r.isMultiDate ? ` • paid ${formatINR(sl.paid)}` : ''}</span>`).join('')}</div></div>
               <div class="lg:col-span-2 lg:text-right font-extrabold num">${formatINR(r.targetAmount)}</div>
               <div class="lg:col-span-2 lg:text-right font-extrabold text-blue-600 num">${formatINR(r.paid)}</div>
               <div class="lg:col-span-2 lg:text-right text-xs font-extrabold num">${r.diff < 0 ? '<span class="chip chip-rose">' + formatINR(Math.abs(r.diff)) + ' Pending</span>' : (r.diff > 0 ? '<span class="chip chip-amber">+' + formatINR(r.diff) + ' Extra</span>' : '<span class="chip chip-emerald">✓ Fully Paid</span>')}</div>
@@ -2727,11 +2737,19 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       const tgtFilter = document.getElementById('finTargetSelect').value;
       const range = { from: fromD, to: toD };
       let groups = computeTargetReconciliation(party, range);
-      if (tgtFilter !== 'ALL') groups = groups.filter(r => r.tranches.some(t => t.id === tgtFilter));
-      const groupIds = new Set();
-      groups.forEach(r => r.tranches.forEach(t => groupIds.add(t.id)));
-      const selected = (party.upiHisab || []).filter(u => u.status === 'OPEN' && inRange(u.date, fromD, toD) && (tgtFilter === 'ALL' || groupIds.has(u.allocatedTargetId)));
-      return { fromD, toD, tgtFilter, groups, selected };
+      if (tgtFilter !== 'ALL') groups = groups.filter(r => (r.allTranches || r.tranches).some(t => t.id === tgtFilter));
+      // amount of each payment that falls against this period's target dates (oldest target first)
+      const parts = new Map();
+      groups.forEach(r => r.slots.forEach(sl => sl.items.forEach(it => parts.set(it.u.id, (parts.get(it.u.id) || 0) + it.part))));
+      // unassigned / direct payments are taken by their payment date
+      const anyGroup = new Set();
+      computeTargetReconciliation(party).forEach(r => r.allSlots.forEach(sl => sl.items.forEach(it => anyGroup.add(it.u.id))));
+      if (tgtFilter === 'ALL') (party.upiHisab || []).forEach(u => {
+        if (u.status === 'OPEN' && !anyGroup.has(u.id) && inRange(u.date, fromD, toD)) parts.set(u.id, Number(u.amount) || 0);
+      });
+      const selected = (party.upiHisab || []).filter(u => u.status === 'OPEN' && (parts.get(u.id) || 0) > 0.0001);
+      const total = selected.reduce((a, u) => a + parts.get(u.id), 0);
+      return { fromD, toD, tgtFilter, groups, selected, parts, total };
     }
 
     window.previewFinalizeBatch = function () {
@@ -2740,7 +2758,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       const toD = document.getElementById('finToDate').value;
       const sel = finalizeSelection(party);
       const selected = sel.selected;
-      const total = selected.reduce((acc, u) => acc + (Number(u.amount) || 0), 0);
+      const total = sel.total;
       document.getElementById('finCountText').textContent = `${selected.length} entr${selected.length === 1 ? 'y' : 'ies'}`;
       const pend = sel.groups.filter(r => r.diff < 0);
       const tInfo = document.getElementById('finTargetsInfo');
@@ -2762,26 +2780,37 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       const sel = finalizeSelection(party);
       const selected = sel.selected;
       if (selected.length === 0) { showToast('No matching open entries'); return; }
-      const total = selected.reduce((acc, u) => acc + (Number(u.amount) || 0), 0);
+      const total = sel.total;
       let n = (party.finalizedBatches || []).length + 1;
       while ((party.finalizedBatches || []).some(b => b.id === 'BATCH-' + String(n).padStart(2, '0'))) n++;
       const batchId = 'BATCH-' + String(n).padStart(2, '0');
       // snapshot of every target payee in this period (all target dates kept)
       const targetSnapshot = sel.groups.map((r, i) => ({ targetId: r.id, name: r.name, upiId: r.upiId, note: r.note || '', targetAmount: r.targetAmount, paidAmount: r.paid, tids: r.tranches.map(t => t.id), dates: r.tranches.map(t => ({ date: t.date, amount: Number(t.targetAmount) || 0 })), date: r.tranches[0] ? r.tranches[0].date : '' }));
-      selected.forEach(u => { u.status = 'CLUBBED'; u.batchId = batchId; });
+      // a payment that is only partly against this period is split: that part is closed, the rest stays open
+      selected.forEach(u => {
+        const part = sel.parts.get(u.id);
+        const amt = Number(u.amount) || 0;
+        if (part < amt - 0.0001) {
+          party.upiHisab.push({ ...u, id: u.id + '-R' + Date.now().toString(36), amount: Math.round((amt - part) * 100) / 100, status: 'OPEN', batchId: null, note: ((u.note ? u.note + ' • ' : '') + `Balance of split payment (${formatINR(amt)}, UTR ${u.utr || '—'})`) });
+          u.amount = Math.round(part * 100) / 100;
+          u.note = (u.note ? u.note + ' • ' : '') + `Part of ${formatINR(amt)} payment`;
+        }
+        u.status = 'CLUBBED'; u.batchId = batchId;
+      });
       if (closeTargets && sel.groups.length) {
         const closeIds = new Set();
         sel.groups.forEach(r => r.tranches.forEach(t => closeIds.add(t.id)));
         const carry = [];
         sel.groups.forEach((r, i) => {
-          if (r.diff < 0) carry.push({ id: 'TGT-' + Date.now() + '-' + i, date: toD, name: r.name, upiId: r.upiId, targetAmount: Math.abs(r.diff), note: `Balance carried forward from ${batchId}` });
+          if (r.diff < 0) carry.push({ id: 'TGT-' + Date.now() + '-' + i, date: nextDay(toD), name: r.name, upiId: r.upiId, targetAmount: Math.abs(r.diff), note: `Balance carried forward from ${batchId}` });
         });
         // payments still open for a closed target (outside this period) move to its carried-forward target
         party.upiHisab.forEach(u => {
           if (u.status === 'OPEN' && closeIds.has(u.allocatedTargetId)) {
             const grp = sel.groups.find(r => r.tranches.some(t => t.id === u.allocatedTargetId));
             const c = grp && carry.find(x => x.name === grp.name && x.upiId === grp.upiId);
-            u.allocatedTargetId = c ? c.id : null;
+            const other = grp && (grp.allTranches || []).find(t => !closeIds.has(t.id));
+            u.allocatedTargetId = c ? c.id : (other ? other.id : null);
           }
         });
         party.upiTargets = (party.upiTargets || []).filter(t => !closeIds.has(t.id)).concat(carry);
@@ -3102,27 +3131,30 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       return slots;
     }
 
-    function partyWiseLedgerHtml(party, entries, range) {
-      const recon = computeTargetReconciliation(party, range);
+    // mode 'payments': show the target dates that the listed payments fall against (Current UPI Ledger)
+    function partyWiseLedgerHtml(party, entries, range, mode) {
+      const recon = computeTargetReconciliation(party, mode === 'payments' ? null : range);
+      const listed = new Set(entries.map(u => u.id));
       const proofIdx = new Map((window.__stmtProofs || []).map(p => [p.uid, p]));
       const used = new Set();
       const groups = [];
       recon.forEach(r => {
-        const ids = new Set(r.tranches.map(t => t.id));
-        const pays = entries.filter(u => ids.has(u.allocatedTargetId));
-        pays.forEach(u => used.add(u.id));
-        fifoAllocate(r.tranches, pays).forEach((sl, ti, all) => {
-          // with a period filter, skip target dates that are outside the period and have no payment in it
-          if (range && !sl.items.length && !inRange(sl.t.date, range.from, range.to)) return;
+        const allTotT = r.allSlots.reduce((a, sl) => a + sl.target, 0);
+        const allTotP = r.allSlots.reduce((a, sl) => a + sl.paid, 0);
+        r.slots.forEach(sl => {
+          if (mode === 'payments' && !sl.items.some(it => listed.has(it.u.id))) return;
+          sl.items.forEach(it => used.add(it.u.id));
           groups.push({
             name: realName(r.name) || r.name || 'Payee', upi: r.upiId, target: sl.target, items: sl.items,
-            tDate: sl.t.date, tNote: sl.t.note || '', tNo: ti + 1, tCount: all.length,
-            payeeTotalTarget: r.targetAmount, payeeTotalPaid: pays.reduce((a, u) => a + (Number(u.amount) || 0), 0)
+            tDate: sl.t.date, tNote: sl.t.note || '', tNo: r.allSlots.indexOf(sl) + 1, tCount: r.allSlots.length,
+            payeeTotalTarget: allTotT, payeeTotalPaid: allTotP
           });
         });
       });
       groups.sort((a, b) => String(a.tDate).localeCompare(String(b.tDate)) || a.name.localeCompare(b.name));
-      const rest = entries.filter(u => !used.has(u.id));
+      const inAnyGroup = new Set();
+      recon.forEach(r => r.allSlots.forEach(sl => sl.items.forEach(it => inAnyGroup.add(it.u.id))));
+      const rest = entries.filter(u => !used.has(u.id) && !inAnyGroup.has(u.id));
       if (rest.length) groups.push({ name: 'Unassigned / Direct payments', upi: '', target: null, items: rest.map(u => ({ u, part: Number(u.amount) || 0, total: Number(u.amount) || 0 })) });
       const palette = ['#4f46e5', '#0891b2', '#7c3aed', '#059669', '#db2777', '#d97706', '#2563eb', '#0d9488'];
       const TD = 'border:1px solid #e2e8f0;padding:6px 8px;vertical-align:top;';
@@ -3179,7 +3211,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             </div>
           </div>
           ${tbl.html}
-          ${partyWiseLedgerHtml(party, openEntries, ur)}
+          ${partyWiseLedgerHtml(party, openEntries, ur, 'payments')}
         </div>`;
       window.openModal('pdfModal');
     };
@@ -3192,19 +3224,22 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       const totPaid = recon.reduce((s, r) => s + (Number(r.paid) || 0), 0);
       const netDiff = totPaid - totTarget;
       const overallStatus = netDiff < 0 ? `Pending: ${formatINR(Math.abs(netDiff))}` : (netDiff > 0 ? `Surplus: +${formatINR(netDiff)}` : 'Fulfilled (Exact)');
-      const openForProofs = [...(party.upiHisab || []).filter(u => u.status === 'OPEN' && (!range || inRange(u.date, range.from, range.to)))].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      const inGroups = new Set();
+      recon.forEach(r => r.matchedEntries.forEach(u => inGroups.add(u.id)));
+      const anyGroup = new Set();
+      computeTargetReconciliation(party).forEach(r => r.matchedEntries.forEach(u => anyGroup.add(u.id)));
+      // payments counted against this period's target dates (any payment date) + unassigned payments paid in the period
+      const openForProofs = [...(party.upiHisab || []).filter(u => u.status === 'OPEN' && (inGroups.has(u.id) || (!anyGroup.has(u.id) && (!range || inRange(u.date, range.from, range.to)))))].sort((a, b) => String(a.date).localeCompare(String(b.date)));
       // every target date is its own line, in date order
       const trancheRows = [];
       recon.forEach(r => {
-        const ids = new Set(r.tranches.map(t => t.id));
-        const pays = openForProofs.filter(u => ids.has(u.allocatedTargetId));
-        fifoAllocate(r.tranches, pays).forEach((sl, ti, all) => {
-          if (range && !sl.items.length && !inRange(sl.t.date, range.from, range.to)) return;
-          trancheRows.push({ date: sl.t.date, name: realName(r.name) || r.name || 'Payee', upiId: r.upiId, target: sl.target, paid: sl.paid, diff: sl.paid - sl.target, no: ti + 1, count: all.length });
+        r.slots.forEach(sl => {
+          trancheRows.push({ date: sl.t.date, name: realName(r.name) || r.name || 'Payee', upiId: r.upiId, target: sl.target, paid: sl.paid, diff: sl.paid - sl.target, no: r.allSlots.indexOf(sl) + 1, count: r.allSlots.length });
         });
       });
       trancheRows.sort((a, b) => String(a.date).localeCompare(String(b.date)) || a.name.localeCompare(b.name));
       const multiPayees = recon.filter(r => r.tranches.length > 1);
+      const periodNote = range ? `<div style="font-size:11px;color:#475569;margin:6px 0 10px 0;padding:8px 10px;border-radius:10px;background:#f5f3ff;border:1px solid #ddd6fe;"><strong>How this period is counted:</strong> targets given between ${escapeHTML(periodLabel(range))}, with every payment made against them — including payments made after the period ended. Payments fill the oldest target date first.</div>` : '';
       window.__stmtProofs = [];
       openForProofs.forEach(u => stmtProofCell(u, payeeNameOf(u, party)));
 
@@ -3226,6 +3261,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             <div style="padding:12px;border-radius:12px;background:#eff6ff;border:1px solid #bfdbfe;"><div style="font-size:10px;font-weight:800;color:#1d4ed8;">TOTAL PAID</div><div style="font-size:17px;font-weight:800;color:#1e3a8a;margin-top:4px;" class="num">${formatINR(totPaid)}</div></div>
             <div style="padding:12px;border-radius:12px;background:#0f172a;color:#ffffff;"><div style="font-size:10px;font-weight:800;color:#6ee7b7;">NET POSITION</div><div style="font-size:14px;font-weight:800;margin-top:4px;" class="num">${escapeHTML(overallStatus)}</div></div>
           </div>
+          ${periodNote}
           <div class="stmt-scroll"><table class="stmt-table" style="width:100%;min-width:560px;border-collapse:collapse;font-size:12px;table-layout:fixed;">
             <colgroup><col style="width:6%"><col style="width:14%"><col style="width:30%"><col style="width:16%"><col style="width:16%"><col style="width:18%"></colgroup>
             <thead><tr style="background:#ede9fe;"><th style="border:1px solid #cbd5e1;padding:7px;text-align:left;">#</th><th style="border:1px solid #cbd5e1;padding:7px;text-align:left;">Target Date</th><th style="border:1px solid #cbd5e1;padding:7px;text-align:left;">Target Payee</th><th style="border:1px solid #cbd5e1;padding:7px;text-align:right;">Target</th><th style="border:1px solid #cbd5e1;padding:7px;text-align:right;">Paid</th><th style="border:1px solid #cbd5e1;padding:7px;text-align:right;">Balance</th></tr></thead>
