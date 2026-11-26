@@ -2096,7 +2096,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
           <div class="lg:col-span-2 text-xs"><div class="font-bold">${escapeHTML(u.appMode || 'UPI')}</div><div class="theme-text-faint num">UTR: ${escapeHTML(u.utr || '—')}</div></div>
           <div class="lg:col-span-1 lg:text-right font-extrabold text-sm text-blue-600 num">${formatINR(amt)}</div>
           <div class="lg:col-span-1 lg:text-center">${proofCellBtn}</div>
-          <div class="lg:col-span-2 flex justify-end gap-1.5">${u.status === 'OPEN' ? `<button type="button" onclick="window.openEditUpiModal('${u.id}')" class="px-2.5 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-extrabold cursor-pointer">Edit / Upload SS</button>` : ''}</div>
+          <div class="lg:col-span-2 flex justify-end gap-1.5">${u.status === 'OPEN' ? `<button type="button" onclick="window.openEditUpiModal('${u.id}')" class="px-2.5 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-extrabold cursor-pointer">Edit / Upload SS</button><button type="button" onclick="window.deleteUpiEntry('${u.id}')" title="Delete this entry" class="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold cursor-pointer">🗑 Delete</button>` : ''}</div>
         </div>`;
       }).join('');
 
@@ -2111,6 +2111,48 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       showAllUpiPayouts = !showAllUpiPayouts;
       window.renderUpiPayoutsTable();
       if (!showAllUpiPayouts) { const el = document.getElementById('upiPayoutsList'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    };
+
+    window.deleteUpiEntry = function (upiId) {
+      const party = getActiveParty();
+      const u = (party.upiHisab || []).find(x => x.id === upiId);
+      if (!u) return;
+      if (u.status !== 'OPEN') { showToast('Clubbed entries cannot be deleted'); return; }
+      if (!confirm(`Delete this UPI payment?\n\n${payeeNameOf(u, party)} • ${formatINR(u.amount)} • ${formatShortDate(u.date)}\nUTR: ${u.utr || '—'}`)) return;
+      party.upiHisab = party.upiHisab.filter(x => x.id !== upiId);
+      saveState();
+      renderWorkspace();
+      showToast('UPI payment deleted');
+    };
+
+    // Deletes the target payee (all dates it was given on, if it has more than one)
+    window.deleteTargetEntry = function (targetId) {
+      const party = getActiveParty();
+      const grp = computeTargetReconciliation(party).find(r => r.tranches.some(t => t.id === targetId));
+      const tranches = grp ? grp.tranches : (party.upiTargets || []).filter(t => t.id === targetId);
+      if (!tranches.length) return;
+      let ids = tranches.map(t => t.id);
+      if (tranches.length > 1) {
+        const choice = prompt(`${grp.name} has targets on ${tranches.length} dates:\n` + tranches.map((t, i) => `${i + 1}. ${formatShortDate(t.date)} — ${formatINR(t.targetAmount)}`).join('\n') + `\n\nType the number to delete one date, or ALL to delete all of them:`, 'ALL');
+        if (choice === null) return;
+        const c = choice.trim().toUpperCase();
+        if (c !== 'ALL') {
+          const t = tranches[parseInt(c, 10) - 1];
+          if (!t) { showToast('Nothing deleted'); return; }
+          ids = [t.id];
+        }
+      }
+      const idSet = new Set(ids);
+      const linked = (party.upiHisab || []).filter(u => u.status === 'OPEN' && idSet.has(u.allocatedTargetId));
+      const name = (grp && grp.name) || tranches[0].name;
+      const total = tranches.filter(t => idSet.has(t.id)).reduce((s, t) => s + (Number(t.targetAmount) || 0), 0);
+      if (!confirm(`Delete target for ${name} (${formatINR(total)})?` + (linked.length ? `\n\n${linked.length} UPI payment(s) linked to it will stay saved and become "Unassigned" (or move to this payee's other date).` : ''))) return;
+      const keep = tranches.find(t => !idSet.has(t.id));
+      linked.forEach(u => { u.allocatedTargetId = keep ? keep.id : null; });
+      party.upiTargets = (party.upiTargets || []).filter(t => !idSet.has(t.id));
+      saveState();
+      renderWorkspace();
+      showToast('Target deleted');
     };
 
     window.changeUpiAllocation = function (upiId, newTargetId) {
@@ -2216,7 +2258,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
               <div class="lg:col-span-2 lg:text-right font-extrabold text-blue-600 num">${formatINR(r.paid)}</div>
               <div class="lg:col-span-2 lg:text-right text-xs font-extrabold num">${r.diff < 0 ? '<span class="chip chip-rose">' + formatINR(Math.abs(r.diff)) + ' Pending</span>' : (r.diff > 0 ? '<span class="chip chip-amber">+' + formatINR(r.diff) + ' Extra</span>' : '<span class="chip chip-emerald">✓ Fully Paid</span>')}</div>
               <div class="lg:col-span-1 lg:text-center">${proofBtn}</div>
-              <div class="lg:col-span-2 flex justify-end gap-1.5"><button type="button" onclick="window.openEditTargetModal('${r.id}')" class="px-2.5 py-1.5 rounded-lg border theme-border text-xs font-extrabold cursor-pointer">Edit</button></div>
+              <div class="lg:col-span-2 flex justify-end gap-1.5 flex-wrap"><button type="button" onclick="window.openEditTargetModal('${r.id}')" class="px-2.5 py-1.5 rounded-lg border theme-border text-xs font-extrabold cursor-pointer">Edit</button><button type="button" onclick="window.deleteTargetEntry('${r.id}')" title="Delete this target" class="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold cursor-pointer">🗑 Delete</button></div>
             </div>`;
           }).join('');
 
