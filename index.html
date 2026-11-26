@@ -393,6 +393,14 @@
               <span id="mainEntryCountLabel" class="px-2.5 py-0.5 rounded-full bg-indigo-600 text-white text-xs font-extrabold">0 active entries</span>
             </div>
           </div>
+
+          <div class="px-4 py-3 border-b theme-border flex flex-wrap items-end gap-2.5" style="background:linear-gradient(90deg, rgba(99,102,241,0.08), rgba(16,185,129,0.04));">
+            <div class="text-xs font-extrabold text-indigo-600 w-full sm:w-auto sm:mr-1">📅 Period for Main Statement PDF</div>
+            <div><label class="block text-[10px] font-extrabold theme-text-faint mb-0.5">From</label><input type="date" id="mainFromDate" onchange="window.applyMainDateFilter()" class="px-2.5 py-1.5 rounded-xl border text-xs font-semibold"></div>
+            <div><label class="block text-[10px] font-extrabold theme-text-faint mb-0.5">To</label><input type="date" id="mainToDate" onchange="window.applyMainDateFilter()" class="px-2.5 py-1.5 rounded-xl border text-xs font-semibold"></div>
+            <button type="button" onclick="window.clearMainDateFilter()" class="px-3 py-1.5 rounded-xl border theme-border theme-text-muted text-xs font-extrabold cursor-pointer">Clear</button>
+            <div id="mainPeriodLabel" class="w-full"><span class="section-help">No date filter — PDF will include all active entries</span></div>
+          </div>
           <div class="hidden lg:grid lg:grid-cols-12 gap-3 px-4 py-2.5 surface-subtle border-b text-[11px] font-extrabold uppercase tracking-wider theme-text-faint">
             <div class="col-span-2">Date &amp; Type</div>
             <div class="col-span-4">Bank / Narration</div>
@@ -434,6 +442,14 @@
             </div>
           </div>
 
+
+          <div class="px-4 py-3 border-b theme-border flex flex-wrap items-end gap-2.5" style="background:linear-gradient(90deg, rgba(59,130,246,0.08), rgba(16,185,129,0.04));">
+            <div class="text-xs font-extrabold text-indigo-600 w-full sm:w-auto sm:mr-1">📅 Period for list &amp; PDF</div>
+            <div><label class="block text-[10px] font-extrabold theme-text-faint mb-0.5">From</label><input type="date" id="upiFromDate" onchange="window.applyUpiDateFilter()" class="px-2.5 py-1.5 rounded-xl border text-xs font-semibold"></div>
+            <div><label class="block text-[10px] font-extrabold theme-text-faint mb-0.5">To</label><input type="date" id="upiToDate" onchange="window.applyUpiDateFilter()" class="px-2.5 py-1.5 rounded-xl border text-xs font-semibold"></div>
+            <button type="button" onclick="window.clearUpiDateFilter()" class="px-3 py-1.5 rounded-xl border theme-border theme-text-muted text-xs font-extrabold cursor-pointer">Clear</button>
+            <div id="upiPeriodLabel" class="w-full"><span class="section-help">No date filter — showing all dates</span></div>
+          </div>
           <div class="hidden lg:grid lg:grid-cols-12 gap-3 px-4 py-2.5 surface-subtle border-b text-[11px] font-extrabold uppercase tracking-wider theme-text-faint">
             <div class="col-span-3">Date &amp; Paid To (Actual Name &amp; UPI)</div>
             <div class="col-span-3">Allocated Target Party</div>
@@ -1980,6 +1996,8 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       const party = getActiveParty();
       const m = getPartyMetrics(party);
       const listEl = document.getElementById('mainLedgerList');
+      const mr = mainRange();
+      setPeriodLabel('mainPeriodLabel', mr, 'No date filter — PDF will include all active entries', mr ? `${m.activeEntries.filter(e => inRange(e.date, mr.from, mr.to)).length} entries in period` : '');
       document.getElementById('mainEntryCountLabel').textContent = `${m.activeEntries.length} active entr${m.activeEntries.length === 1 ? 'y' : 'ies'}`;
       const sorted = [...m.activeEntries].sort((a, b) => a.date.localeCompare(b.date));
       let running = 0;
@@ -2022,12 +2040,15 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       const listEl = document.getElementById('upiPayoutsList');
       const footerEl = document.getElementById('upiPayoutsFooter');
       const q = (document.getElementById('upiSearchInput')?.value || '').trim().toLowerCase();
+      const ur = upiRange();
       let rows = (party.upiHisab || []).filter(u => {
         if (upiStatusFilter !== 'ALL' && u.status !== upiStatusFilter) return false;
+        if (ur && !inRange(u.date, ur.from, ur.to)) return false;
         if (!q) return true;
         return (u.payeeName || '').toLowerCase().includes(q) || (u.payeeUpi || '').toLowerCase().includes(q) || (u.utr || '').toLowerCase().includes(q);
       }).sort((a, b) => b.date.localeCompare(a.date));
 
+      setPeriodLabel('upiPeriodLabel', ur, 'No date filter — showing all dates', `${rows.length} entries • ${formatINR(rows.reduce((a, u) => a + (Number(u.amount) || 0), 0))}`);
       if (rows.length === 0) {
         listEl.innerHTML = `<div class="p-8 text-center text-xs font-bold theme-text-faint">No UPI payout entries matching filter.</div>`;
         footerEl.innerHTML = `<span>0 entries</span><span>Total: ₹0</span>`;
@@ -2079,6 +2100,31 @@ function saveProofToDrive(partyName, fileName, base64Data) {
     };
 
     let reconFrom = '', reconTo = '';
+    let upiFrom = '', upiTo = '', mainFrom = '', mainTo = '';
+    function makeDateFilter(key, onChange) {
+      const cap = key.charAt(0).toUpperCase() + key.slice(1);
+      window['apply' + cap + 'DateFilter'] = function () {
+        const f = document.getElementById(key + 'FromDate').value || '';
+        const t = document.getElementById(key + 'ToDate').value || '';
+        if (f && t && f > t) { showToast('From date is after To date'); return; }
+        if (key === 'upi') { upiFrom = f; upiTo = t; } else { mainFrom = f; mainTo = t; }
+        onChange();
+      };
+      window['clear' + cap + 'DateFilter'] = function () {
+        document.getElementById(key + 'FromDate').value = '';
+        document.getElementById(key + 'ToDate').value = '';
+        if (key === 'upi') { upiFrom = upiTo = ''; } else { mainFrom = mainTo = ''; }
+        onChange();
+      };
+    }
+    function setPeriodLabel(id, range, emptyText, extra) {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = range ? `<span class="chip chip-blue">📅 Period: ${periodLabel(range)}${extra ? ' • ' + extra : ''}</span>` : `<span class="section-help">${emptyText}</span>`;
+    }
+    function upiRange() { return (upiFrom || upiTo) ? { from: upiFrom, to: upiTo } : null; }
+    function mainRange() { return (mainFrom || mainTo) ? { from: mainFrom, to: mainTo } : null; }
+    makeDateFilter('upi', () => window.renderUpiPayoutsTable());
+    makeDateFilter('main', () => renderMainLedger());
     function inRange(d, from, to) { d = String(d || '').slice(0, 10); return (!from || d >= from) && (!to || d <= to); }
     function reconRange() { return (reconFrom || reconTo) ? { from: reconFrom, to: reconTo } : null; }
     function periodLabel(r) { return r ? `${r.from ? formatShortDate(r.from) : 'Start'} → ${r.to ? formatShortDate(r.to) : 'Today'}` : ''; }
@@ -2673,7 +2719,9 @@ function saveProofToDrive(partyName, fileName, base64Data) {
 
     window.generateCurrentUpiLedgerPDF = function () {
       const party = getActiveParty();
-      const openEntries = [...(party.upiHisab || []).filter(u => u.status === 'OPEN')].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      const ur = upiRange();
+      const openEntries = [...(party.upiHisab || []).filter(u => u.status === 'OPEN' && (!ur || inRange(u.date, ur.from, ur.to)))].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      if (ur && !openEntries.length) { showToast('No open UPI payments in this period'); return; }
       const tbl = buildUpiStatementTable(openEntries, party, true);
       document.getElementById('pdfPrintArea').innerHTML = `
         <div style="color:#0f172a;">
@@ -2681,6 +2729,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             <div>
               <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:#1d4ed8;">Party Hisab Book • Current Open UPI Ledger</div>
               <h1 style="font-size:22px;font-weight:800;margin:4px 0 0 0;">${escapeHTML(party.name)}</h1>
+              ${ur ? `<div style="display:inline-block;margin-top:6px;padding:3px 10px;border-radius:999px;background:#dbeafe;color:#1e40af;font-size:11px;font-weight:800;">Period: ${escapeHTML(periodLabel(ur))}</div>` : ''}
               <div style="font-size:12px;color:#475569;">${escapeHTML([party.contact, party.city].filter(Boolean).join(' • '))}</div>
             </div>
             <div style="text-align:right;font-size:12px;">
@@ -2689,7 +2738,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             </div>
           </div>
           ${tbl.html}
-          ${partyWiseLedgerHtml(party, openEntries)}
+          ${partyWiseLedgerHtml(party, openEntries, ur)}
         </div>`;
       window.openModal('pdfModal');
     };
@@ -2784,18 +2833,33 @@ function saveProofToDrive(partyName, fileName, base64Data) {
     window.generateMainStatementPDF = function () {
       const party = getActiveParty();
       const m = getPartyMetrics(party);
-      const sorted = [...m.activeEntries].sort((a, b) => String(a.date).localeCompare(String(b.date)));
-      let running = 0;
+      const mr = mainRange();
+      const all = [...m.activeEntries].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      const signed = e => ((e.type === 'RECEIVED' || e.type === 'OS_BF') ? 1 : -1) * (Number(e.amount) || 0);
+      // balance of everything before the period is carried in as the opening balance
+      const openingBal = mr && mr.from ? all.filter(e => String(e.date).slice(0, 10) < mr.from).reduce((s, e) => s + signed(e), 0) : 0;
+      const sorted = mr ? all.filter(e => inRange(e.date, mr.from, mr.to)) : all;
+      if (mr && !sorted.length) { showToast('No main ledger entries in this period'); return; }
+      let running = openingBal;
+      const periodIn = sorted.filter(e => signed(e) > 0).reduce((s, e) => s + signed(e), 0);
+      const periodOut = sorted.filter(e => signed(e) < 0).reduce((s, e) => s - signed(e), 0);
       window.__stmtProofs = [];
       document.getElementById('pdfPrintArea').innerHTML = `
         <div style="color:#0f172a;">
           <div style="border-bottom:2px solid #0f172a;padding-bottom:12px;margin-bottom:14px;">
             <div style="font-size:11px;font-weight:800;color:#4338ca;text-transform:uppercase;">Party Hisab Book • Main Party Statement</div>
             <h1 style="font-size:20px;font-weight:800;margin:4px 0 0 0;">${escapeHTML(party.name)}</h1>
+            ${mr ? `<div style="display:inline-block;margin-top:6px;padding:3px 10px;border-radius:999px;background:#e0e7ff;color:#3730a3;font-size:11px;font-weight:800;">Period: ${escapeHTML(periodLabel(mr))}</div>` : ''}
           </div>
+          ${mr ? `<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:12px;font-size:11px;">
+            <div style="padding:8px;border-radius:10px;background:#f8fafc;border:1px solid #cbd5e1;"><div style="font-weight:800;color:#64748b;">OPENING BALANCE</div><div style="font-size:14px;font-weight:800;">${formatINR(openingBal)}</div></div>
+            <div style="padding:8px;border-radius:10px;background:#ecfdf5;border:1px solid #a7f3d0;"><div style="font-weight:800;color:#047857;">RECEIVED IN PERIOD</div><div style="font-size:14px;font-weight:800;color:#047857;">+${formatINR(periodIn)}</div></div>
+            <div style="padding:8px;border-radius:10px;background:#fff1f2;border:1px solid #fecdd3;"><div style="font-weight:800;color:#be123c;">RETURNED IN PERIOD</div><div style="font-size:14px;font-weight:800;color:#be123c;">-${formatINR(periodOut)}</div></div>
+            <div style="padding:8px;border-radius:10px;background:#0f172a;color:#fff;"><div style="font-weight:800;color:#a5b4fc;">CLOSING BALANCE</div><div style="font-size:14px;font-weight:800;">${formatINR(openingBal + periodIn - periodOut)}</div></div>
+          </div>` : ''}
           <div class="stmt-scroll"><table class="stmt-table" style="width:100%;min-width:660px;table-layout:fixed;border-collapse:collapse;border:1px solid #cbd5e1;font-size:12px;"><colgroup><col style="width:13%"><col style="width:41%"><col style="width:18%"><col style="width:18%"><col style="width:10%"></colgroup>
             <thead><tr style="background:#f1f5f9;"><th style="border:1px solid #cbd5e1;padding:8px;text-align:left;">Date</th><th style="border:1px solid #cbd5e1;padding:8px;text-align:left;">Particulars</th><th style="border:1px solid #cbd5e1;padding:8px;text-align:right;">Amount (₹)</th><th style="border:1px solid #cbd5e1;padding:8px;text-align:right;">Balance O/S</th><th style="border:1px solid #cbd5e1;padding:8px;text-align:center;">Proof</th></tr></thead>
-            <tbody>${sorted.map(e => {
+            <tbody>${mr && mr.from ? `<tr style="background:#f1f5f9;font-weight:800;"><td style="border:1px solid #cbd5e1;padding:8px;" class="num">${formatShortDate(mr.from)}</td><td style="border:1px solid #cbd5e1;padding:8px;">Opening balance (brought forward)</td><td style="border:1px solid #cbd5e1;padding:8px;"></td><td style="border:1px solid #cbd5e1;padding:8px;text-align:right;" class="num">${formatINR(openingBal)}</td><td style="border:1px solid #cbd5e1;padding:8px;"></td></tr>` : ''}${sorted.map(e => {
               const amt = Number(e.amount) || 0;
               const isCredit = e.type === 'RECEIVED' || e.type === 'OS_BF';
               running += isCredit ? amt : -amt;
