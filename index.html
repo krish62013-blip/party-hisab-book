@@ -1420,7 +1420,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         `<option value="">-- Unassigned / Direct Payout --</option>`,
         ...activeTargets.map(t => {
           const label = realName(t.name) || 'Target Payee';
-          return `<option value="${t.id}" ${t.id === selectedId ? 'selected' : ''}>${escapeHTML(label)} (${escapeHTML(t.upiId || '')} • ${formatINR(t.targetAmount)})</option>`;
+          return `<option value="${t.id}" ${t.id === selectedId ? 'selected' : ''}>${escapeHTML(label)} — target ${escapeHTML(formatShortDate(t.date))} (${formatINR(t.targetAmount)})</option>`;
         })
       ].join('');
 
@@ -1469,7 +1469,10 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       const party = getActiveParty();
       const nameVal = (document.getElementById('inpUpiName').value || '').trim().toLowerCase();
       const upiVal = (document.getElementById('inpUpiId').value || '').trim().toLowerCase();
-      const match = party.upiTargets.find(t => (nameVal && t.name.toLowerCase() === nameVal) || (upiVal && t.upiId.toLowerCase() === upiVal));
+      const same = (party.upiTargets || []).filter(t => (nameVal && String(t.name || '').toLowerCase() === nameVal) || (upiVal && String(t.upiId || '').toLowerCase() === upiVal))
+        .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      const paidFor = id => (party.upiHisab || []).filter(u => u.status === 'OPEN' && u.allocatedTargetId === id).reduce((a, u) => a + (Number(u.amount) || 0), 0);
+      const match = same.find(t => paidFor(t.id) < (Number(t.targetAmount) || 0)) || same[same.length - 1];
       if (match) document.getElementById('inpUpiAllocateTarget').value = match.id;
     };
 
@@ -2351,7 +2354,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       listEl.innerHTML = visibleRows.map(u => {
         const amt = Number(u.amount) || 0;
         sum += amt;
-        const targetOptions = [`<option value="">-- Unassigned --</option>`, ...(party.upiTargets || []).map(t => `<option value="${t.id}" ${u.allocatedTargetId === t.id ? 'selected' : ''}>${escapeHTML(t.name)} (${formatINR(t.targetAmount)})</option>`)].join('');
+        const targetOptions = [`<option value="">-- Unassigned --</option>`, ...[...(party.upiTargets || [])].sort((a, b) => String(a.date).localeCompare(String(b.date))).map(t => `<option value="${t.id}" ${u.allocatedTargetId === t.id ? 'selected' : ''}>${escapeHTML(realName(t.name) || t.name)} — ${escapeHTML(formatShortDate(t.date))} (${formatINR(t.targetAmount)})</option>`)].join('');
         const hasRealPhoto = u.proofImg && !String(u.proofImg).startsWith('data:image/svg+xml');
         const proofCellBtn = hasRealPhoto
           ? proofThumbsHtml([u], 'openUpiProof', '')
@@ -2525,7 +2528,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
               ? proofThumbsHtml(r.matchedEntries, 'openUpiProof', '')
               : (r.matchedEntries.length > 0 ? `<button type="button" onclick="window.openUpiProof('${r.matchedEntries[r.matchedEntries.length - 1].id}')" class="px-2.5 py-1.5 rounded-lg bg-slate-700 text-white text-xs font-extrabold cursor-pointer">Receipt</button>` : `<span class="text-xs theme-text-faint">—</span>`);
             return `<div class="p-4 surface-row grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:items-center">
-              <div class="lg:col-span-3"><div class="font-extrabold text-sm">${escapeHTML(r.name)} ${r.isMultiDate ? `<span class="chip chip-blue">${r.tranches.length} dates</span>` : ''}</div><div class="text-xs theme-text-faint">${escapeHTML(r.upiId)}</div><div class="mt-1 flex flex-wrap gap-1">${r.tranches.map(t => `<span class="chip chip-slate num">🎯 ${formatShortDate(t.date)} • ${formatINR(t.targetAmount)}</span>`).join('')}</div></div>
+              <div class="lg:col-span-3"><div class="font-extrabold text-sm">${escapeHTML(r.name)} ${r.isMultiDate ? `<span class="chip chip-blue">${r.tranches.length} dates</span>` : ''}</div><div class="text-xs theme-text-faint">${escapeHTML(r.upiId)}</div><div class="mt-1 flex flex-wrap gap-1">${r.tranches.map(t => { const pd = r.matchedEntries.filter(u => u.allocatedTargetId === t.id).reduce((a, u) => a + (Number(u.amount) || 0), 0); return `<span class="chip ${pd >= (Number(t.targetAmount) || 0) ? 'chip-emerald' : 'chip-slate'} num">🎯 ${formatShortDate(t.date)} • ${formatINR(t.targetAmount)}${r.isMultiDate ? ` • paid ${formatINR(pd)}` : ''}</span>`; }).join('')}</div></div>
               <div class="lg:col-span-2 lg:text-right font-extrabold num">${formatINR(r.targetAmount)}</div>
               <div class="lg:col-span-2 lg:text-right font-extrabold text-blue-600 num">${formatINR(r.paid)}</div>
               <div class="lg:col-span-2 lg:text-right text-xs font-extrabold num">${r.diff < 0 ? '<span class="chip chip-rose">' + formatINR(Math.abs(r.diff)) + ' Pending</span>' : (r.diff > 0 ? '<span class="chip chip-amber">+' + formatINR(r.diff) + ' Extra</span>' : '<span class="chip chip-emerald">✓ Fully Paid</span>')}</div>
@@ -3066,12 +3069,21 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       const recon = computeTargetReconciliation(party, range);
       const proofIdx = new Map((window.__stmtProofs || []).map(p => [p.uid, p]));
       const used = new Set();
-      const groups = recon.map(r => {
-        const ids = new Set(r.tranches.map(t => t.id));
-        const list = entries.filter(u => ids.has(u.allocatedTargetId));
-        list.forEach(u => used.add(u.id));
-        return { name: realName(r.name) || r.name || 'Payee', upi: r.upiId, target: r.targetAmount, list, tranches: r.tranches };
-      }).filter(g => g.list.length || g.target);
+      const groups = [];
+      recon.forEach(r => {
+        r.tranches.forEach((t, ti) => {
+          const list = entries.filter(u => u.allocatedTargetId === t.id);
+          list.forEach(u => used.add(u.id));
+          // with a period filter, skip target dates that are outside the period and have no payment in it
+          if (range && !list.length && !inRange(t.date, range.from, range.to)) return;
+          groups.push({
+            name: realName(r.name) || r.name || 'Payee', upi: r.upiId, target: Number(t.targetAmount) || 0, list,
+            tDate: t.date, tNote: t.note || '', tNo: ti + 1, tCount: r.tranches.length,
+            payeeTotalTarget: r.targetAmount, payeeTotalPaid: r.paid
+          });
+        });
+      });
+      groups.sort((a, b) => String(a.tDate).localeCompare(String(b.tDate)) || a.name.localeCompare(b.name));
       const rest = entries.filter(u => !used.has(u.id));
       if (rest.length) groups.push({ name: 'Unassigned / Direct payments', upi: '', target: null, list: rest });
       const palette = ['#4f46e5', '#0891b2', '#7c3aed', '#059669', '#db2777', '#d97706', '#2563eb', '#0d9488'];
@@ -3091,11 +3103,11 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         }).join('');
         return `<div data-pdf-keep="1" style="border:2px solid ${color}33;border-radius:14px;overflow:hidden;margin-bottom:16px;page-break-inside:auto;">
           <div data-pdf-keepnext="1" style="background:${color};color:#ffffff;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
-            <div><div style="font-size:14px;font-weight:800;">${gi + 1}. ${escapeHTML(g.name)}</div>${g.upi ? `<div style="font-size:11px;opacity:0.85;">${escapeHTML(g.upi)}</div>` : ''}</div>
+            <div><div style="font-size:14px;font-weight:800;">${gi + 1}. ${escapeHTML(g.name)}${g.tDate ? ` <span style="display:inline-block;margin-left:4px;padding:1px 8px;border-radius:999px;background:rgba(255,255,255,0.25);font-size:11px;">🎯 Target dated ${escapeHTML(formatShortDate(g.tDate))}</span>` : ''}</div>${g.upi ? `<div style="font-size:11px;opacity:0.85;">${escapeHTML(g.upi)}${g.tCount > 1 ? ` • Target ${g.tNo} of ${g.tCount} for this payee` : ''}</div>` : ''}</div>
             <div style="font-size:11px;font-weight:700;text-align:right;">${g.target !== null ? 'Target: ' + formatINR(g.target) + ' • ' : ''}Paid: ${formatINR(paid)}</div>
           </div>
           <div style="padding:10px 12px;">
-            ${g.tranches && g.tranches.length ? `<div data-pdf-keepnext="1" style="font-size:11px;margin-bottom:6px;"><strong>Target given on ${g.tranches.length} date${g.tranches.length > 1 ? 's' : ''}:</strong> ${g.tranches.map(t => `<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 8px;border-radius:999px;background:${color}14;border:1px solid ${color}55;font-weight:700;">${escapeHTML(formatShortDate(t.date))} — ${formatINR(t.targetAmount)}${t.note ? ' (' + escapeHTML(t.note) + ')' : ''}</span>`).join('')}</div>` : ''}
+            ${g.tDate ? `<div data-pdf-keepnext="1" style="font-size:11px;margin-bottom:6px;"><strong>Target given on:</strong> <span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 8px;border-radius:999px;background:${color}14;border:1px solid ${color}55;font-weight:700;">${escapeHTML(formatShortDate(g.tDate))} — ${formatINR(g.target)}${g.tNote ? ' (' + escapeHTML(g.tNote) + ')' : ''}</span>${g.tCount > 1 ? `<span style="color:#64748b;"> • All ${g.tCount} targets of this payee: ${formatINR(g.payeeTotalTarget)}, paid ${formatINR(g.payeeTotalPaid)}</span>` : ''}</div>` : ''}
             ${balTxt ? `<div data-pdf-keepnext="1" style="font-size:12px;font-weight:800;margin-bottom:8px;">Balance: ${balTxt}</div>` : ''}
             ${sorted.length ? `<div class="stmt-scroll"><table class="stmt-table" style="width:100%;min-width:560px;border-collapse:collapse;font-size:11px;table-layout:fixed;">
               <colgroup><col style="width:5%"><col style="width:13%"><col style="width:32%"><col style="width:22%"><col style="width:16%"><col style="width:12%"></colgroup>
@@ -3142,6 +3154,15 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       const netDiff = totPaid - totTarget;
       const overallStatus = netDiff < 0 ? `Pending: ${formatINR(Math.abs(netDiff))}` : (netDiff > 0 ? `Surplus: +${formatINR(netDiff)}` : 'Fulfilled (Exact)');
       const openForProofs = [...(party.upiHisab || []).filter(u => u.status === 'OPEN' && (!range || inRange(u.date, range.from, range.to)))].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      // every target date is its own line, in date order
+      const trancheRows = [];
+      recon.forEach(r => r.tranches.forEach((t, ti) => {
+        const paidT = openForProofs.filter(u => u.allocatedTargetId === t.id).reduce((s2, u) => s2 + (Number(u.amount) || 0), 0);
+        if (range && !paidT && !inRange(t.date, range.from, range.to)) return;
+        trancheRows.push({ date: t.date, name: realName(r.name) || r.name || 'Payee', upiId: r.upiId, target: Number(t.targetAmount) || 0, paid: paidT, diff: paidT - (Number(t.targetAmount) || 0), no: ti + 1, count: r.tranches.length });
+      }));
+      trancheRows.sort((a, b) => String(a.date).localeCompare(String(b.date)) || a.name.localeCompare(b.name));
+      const multiPayees = recon.filter(r => r.tranches.length > 1);
       window.__stmtProofs = [];
       openForProofs.forEach(u => stmtProofCell(u, payeeNameOf(u, party)));
 
@@ -3164,10 +3185,13 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             <div style="padding:12px;border-radius:12px;background:#0f172a;color:#ffffff;"><div style="font-size:10px;font-weight:800;color:#6ee7b7;">NET POSITION</div><div style="font-size:14px;font-weight:800;margin-top:4px;" class="num">${escapeHTML(overallStatus)}</div></div>
           </div>
           <div class="stmt-scroll"><table class="stmt-table" style="width:100%;min-width:560px;border-collapse:collapse;font-size:12px;table-layout:fixed;">
-            <colgroup><col style="width:6%"><col style="width:36%"><col style="width:18%"><col style="width:18%"><col style="width:22%"></colgroup>
-            <thead><tr style="background:#ede9fe;"><th style="border:1px solid #cbd5e1;padding:7px;text-align:left;">#</th><th style="border:1px solid #cbd5e1;padding:7px;text-align:left;">Target Payee</th><th style="border:1px solid #cbd5e1;padding:7px;text-align:right;">Target</th><th style="border:1px solid #cbd5e1;padding:7px;text-align:right;">Paid</th><th style="border:1px solid #cbd5e1;padding:7px;text-align:right;">Balance</th></tr></thead>
-            <tbody>${recon.map((r, idx) => `<tr><td style="border:1px solid #cbd5e1;padding:7px;">${idx + 1}</td><td style="border:1px solid #cbd5e1;padding:7px;"><strong>${escapeHTML(realName(r.name) || 'Payee')}</strong>${r.upiId ? '<br><span style="font-size:10px;color:#64748b;">' + escapeHTML(r.upiId) + '</span>' : ''}<br><span style="font-size:10px;color:#6d28d9;font-weight:700;">🎯 ${escapeHTML(trancheDatesText(r))}</span></td><td style="border:1px solid #cbd5e1;padding:7px;text-align:right;" class="num">${formatINR(r.targetAmount)}</td><td style="border:1px solid #cbd5e1;padding:7px;text-align:right;color:#1d4ed8;font-weight:800;" class="num">${formatINR(r.paid)}</td><td style="border:1px solid #cbd5e1;padding:7px;text-align:right;font-weight:800;color:${r.diff < 0 ? '#e11d48' : r.diff > 0 ? '#d97706' : '#059669'};" class="num">${r.diff < 0 ? formatINR(Math.abs(r.diff)) + ' pending' : r.diff > 0 ? '+' + formatINR(r.diff) + ' extra' : 'Exact ✓'}</td></tr>`).join('')}</tbody>
+            <colgroup><col style="width:6%"><col style="width:14%"><col style="width:30%"><col style="width:16%"><col style="width:16%"><col style="width:18%"></colgroup>
+            <thead><tr style="background:#ede9fe;"><th style="border:1px solid #cbd5e1;padding:7px;text-align:left;">#</th><th style="border:1px solid #cbd5e1;padding:7px;text-align:left;">Target Date</th><th style="border:1px solid #cbd5e1;padding:7px;text-align:left;">Target Payee</th><th style="border:1px solid #cbd5e1;padding:7px;text-align:right;">Target</th><th style="border:1px solid #cbd5e1;padding:7px;text-align:right;">Paid</th><th style="border:1px solid #cbd5e1;padding:7px;text-align:right;">Balance</th></tr></thead>
+            <tbody>${trancheRows.map((r, idx) => `<tr><td style="border:1px solid #cbd5e1;padding:7px;">${idx + 1}</td><td style="border:1px solid #cbd5e1;padding:7px;white-space:nowrap;" class="num">${escapeHTML(formatShortDate(r.date))}</td><td style="border:1px solid #cbd5e1;padding:7px;"><strong>${escapeHTML(r.name)}</strong>${r.upiId ? '<br><span style="font-size:10px;color:#64748b;">' + escapeHTML(r.upiId) + '</span>' : ''}${r.count > 1 ? `<br><span style="font-size:10px;color:#6d28d9;font-weight:700;">Target ${r.no} of ${r.count}</span>` : ''}</td><td style="border:1px solid #cbd5e1;padding:7px;text-align:right;" class="num">${formatINR(r.target)}</td><td style="border:1px solid #cbd5e1;padding:7px;text-align:right;color:#1d4ed8;font-weight:800;" class="num">${formatINR(r.paid)}</td><td style="border:1px solid #cbd5e1;padding:7px;text-align:right;font-weight:800;color:${r.diff < 0 ? '#e11d48' : r.diff > 0 ? '#d97706' : '#059669'};" class="num">${r.diff < 0 ? formatINR(Math.abs(r.diff)) + ' pending' : r.diff > 0 ? '+' + formatINR(r.diff) + ' extra' : 'Exact ✓'}</td></tr>`).join('')}</tbody>
           </table></div>
+          ${multiPayees.length ? `<div data-pdf-keepnext="1" style="font-size:12px;font-weight:800;color:#6d28d9;margin:14px 0 6px 0;">Payees with more than one target date — combined totals</div>
+          <div class="stmt-scroll"><table class="stmt-table" style="width:100%;min-width:560px;border-collapse:collapse;font-size:11px;table-layout:fixed;"><thead><tr style="background:#f5f3ff;"><th style="border:1px solid #cbd5e1;padding:6px;text-align:left;">Payee</th><th style="border:1px solid #cbd5e1;padding:6px;text-align:left;">Target dates</th><th style="border:1px solid #cbd5e1;padding:6px;text-align:right;">Total Target</th><th style="border:1px solid #cbd5e1;padding:6px;text-align:right;">Total Paid</th><th style="border:1px solid #cbd5e1;padding:6px;text-align:right;">Balance</th></tr></thead>
+            <tbody>${multiPayees.map(r => `<tr><td style="border:1px solid #cbd5e1;padding:6px;"><strong>${escapeHTML(realName(r.name) || r.name)}</strong></td><td style="border:1px solid #cbd5e1;padding:6px;">${r.tranches.map(t => escapeHTML(formatShortDate(t.date)) + ' — ' + formatINR(t.targetAmount)).join('<br>')}</td><td style="border:1px solid #cbd5e1;padding:6px;text-align:right;">${formatINR(r.targetAmount)}</td><td style="border:1px solid #cbd5e1;padding:6px;text-align:right;color:#1d4ed8;font-weight:800;">${formatINR(r.paid)}</td><td style="border:1px solid #cbd5e1;padding:6px;text-align:right;font-weight:800;color:${r.diff < 0 ? '#e11d48' : r.diff > 0 ? '#d97706' : '#059669'};">${r.diff < 0 ? formatINR(-r.diff) + ' pending' : r.diff > 0 ? '+' + formatINR(r.diff) + ' extra' : 'Exact ✓'}</td></tr>`).join('')}</tbody></table></div>` : ''}
           ${partyWiseLedgerHtml(party, openForProofs, range)}
         </div>`;
       window.openModal('pdfModal');
