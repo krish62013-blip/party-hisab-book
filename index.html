@@ -1915,7 +1915,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       if (!(window.jspdf && window.jspdf.jsPDF)) await loadScriptOnce(PDF_LIBS[1]);
     }
     // start loading early so the first PDF is fast
-    setTimeout(() => { ensurePdfLibs().catch(() => {}); }, 2500);
+    setTimeout(() => { ensurePdfLibs().catch(() => {}); }, 300);
 
     function pdfFileName() {
       const party = getActiveParty();
@@ -1965,6 +1965,39 @@ function saveProofToDrive(partyName, fileName, base64Data) {
     }
 
     let pdfBusy = false;
+    const PDF_W = 780; // render width in CSS px
+    const PDF_CSS = `html,body{margin:0;padding:0;background:#fff;color:#0f172a;}
+      body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased;}
+      *{box-sizing:border-box;}
+      .num{font-family:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums;}
+      .stmt-scroll{overflow:visible!important;} .stmt-table{min-width:0!important;}
+      td:first-child,th:first-child{white-space:nowrap;}
+      img{max-width:100%;}`;
+
+    // Renders the statement inside a small private frame (much faster than rendering inside the full app)
+    async function buildPdfFrame(html) {
+      const frame = document.createElement('iframe');
+      frame.setAttribute('aria-hidden', 'true');
+      frame.style.cssText = `position:fixed;left:-30000px;top:0;width:${PDF_W}px;height:1200px;border:0;visibility:hidden;`;
+      document.body.appendChild(frame);
+      const doc = frame.contentDocument;
+      doc.open();
+      doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap"><style>${PDF_CSS}</style></head><body><div id="pdfRoot" style="width:${PDF_W}px;padding:24px;">${html}</div></body></html>`);
+      doc.close();
+      const root = doc.getElementById('pdfRoot');
+      root.querySelectorAll('a').forEach(x => x.removeAttribute('onclick'));
+      root.querySelectorAll('[style*="page-break-before"]').forEach(x => { x.style.pageBreakBefore = 'auto'; });
+      await Promise.race([
+        Promise.all([
+          doc.fonts && doc.fonts.ready ? doc.fonts.ready : Promise.resolve(),
+          ...[...root.querySelectorAll('img')].map(img => img.complete ? Promise.resolve() : new Promise(r => { img.onload = img.onerror = r; }))
+        ]),
+        new Promise(r => setTimeout(r, 8000))
+      ]);
+      frame.style.height = (root.scrollHeight + 10) + 'px';
+      return { frame, doc, root };
+    }
+
     window.downloadPdfDirect = async function () {
       if (pdfBusy) return;
       const area = document.getElementById('pdfPrintArea');
@@ -1975,49 +2008,34 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       const setStatus = t => { if (status) status.textContent = t; };
       if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
       setStatus('Preparing PDF…');
-      let host = null, cover = null;
+      let built = null;
       try {
-        await ensurePdfLibs();
-        const W = 780; // render width in CSS px
-        cover = document.createElement('div');
-        cover.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(15,23,42,0.55);display:flex;align-items:center;justify-content:center;color:#fff;font:800 15px system-ui,sans-serif;';
-        cover.innerHTML = '<div style="background:#4f46e5;padding:14px 22px;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.3)">⏳ Making your PDF…</div>';
-        host = document.createElement('div');
-        host.style.cssText = `position:absolute;left:0;top:0;width:${W}px;padding:24px;box-sizing:border-box;background:#ffffff;color:#0f172a;z-index:2147483645;font-family:Inter,system-ui,sans-serif;`;
-        host.innerHTML = area.innerHTML;
-        host.querySelectorAll('.stmt-scroll').forEach(x => { x.style.overflow = 'visible'; });
-        host.querySelectorAll('.stmt-table').forEach(x => { x.style.minWidth = '0'; });
-        host.querySelectorAll('a').forEach(a => { a.removeAttribute('onclick'); });
-        host.querySelectorAll('td:first-child, th:first-child').forEach(c => { c.style.whiteSpace = 'nowrap'; });
-        host.querySelectorAll('[style*="page-break-before"]').forEach(x => { x.style.pageBreakBefore = 'auto'; });
-        document.body.appendChild(host);
-        document.body.appendChild(cover);
-        const prevScroll = window.scrollY;
-        window.scrollTo(0, 0);
-        await waitForImages(host, 12000);
-        await new Promise(r => setTimeout(r, 60));
+        const libs = ensurePdfLibs();
+        built = await buildPdfFrame(area.innerHTML);
+        await libs;
+        const { root } = built;
 
         const { jsPDF } = window.jspdf;
         const pdf = new jsPDF({ unit: 'pt', format: 'a4', compress: true });
         const pageWpt = pdf.internal.pageSize.getWidth();
         const pageHpt = pdf.internal.pageSize.getHeight();
-        const ratio = pageWpt / W;                 // pt per css px (full-width, padding is inside host)
+        const ratio = pageWpt / PDF_W;
         const pageHpx = Math.floor(pageHpt / ratio);
 
-        const hostTop = host.getBoundingClientRect().top;
+        const rootTop = root.getBoundingClientRect().top;
         const atoms = [];
-        [...host.children].forEach(c => collectAtoms(c, atoms));
-        const totalH = host.scrollHeight;
-        const edges = atoms.map(a => [a[0] - hostTop, a[1] - hostTop]).sort((a, b) => a[0] - b[0]);
+        [...root.children].forEach(c => collectAtoms(c, atoms));
+        const totalH = root.scrollHeight;
+        const edges = atoms.map(x => [x[0] - rootTop, x[1] - rootTop]);
 
-        // choose page breaks only where no row / card / block would be cut
+        // page breaks only where no row / card / block would be cut
         const cutsAtom = p => edges.some(([t, b]) => t < p - 2 && b > p + 2);
         const candidates = [...new Set(edges.map(e => Math.round(e[1])))].sort((x, y) => x - y);
         const slices = [];
         let start = 0;
         while (start < totalH - 2) {
           let end = start + pageHpx;
-          if (end >= totalH) { end = totalH; }
+          if (end >= totalH) end = totalH;
           else {
             let best = 0;
             for (const p of candidates) { if (p > start + 60 && p <= end && !cutsAtom(p)) best = p; }
@@ -2027,21 +2045,38 @@ function saveProofToDrive(partyName, fileName, base64Data) {
           start = end;
         }
 
-        const scale = Math.min(2, Math.max(1.3, (window.devicePixelRatio || 1)));
-        for (let i = 0; i < slices.length; i++) {
-          const [y0, y1] = slices[i];
-          setStatus(`Page ${i + 1} of ${slices.length}…`);
-          const canvas = await window.html2canvas(host, {
-            scale, useCORS: true, allowTaint: false, backgroundColor: '#ffffff', logging: false,
-            x: 0, y: y0, width: W, height: Math.max(1, y1 - y0), windowWidth: Math.max(W, document.documentElement.clientWidth),
-            scrollX: 0, scrollY: 0
+        // one render for the whole statement when it is small enough, otherwise a few big chunks
+        const scale = 1.5;
+        const MAX_CHUNK_PX = 7000;  // keeps the canvas within phone limits
+        const chunks = [];
+        let cur = null;
+        slices.forEach(sl => {
+          if (!cur || sl[1] - cur.y0 > MAX_CHUNK_PX) { cur = { y0: sl[0], y1: sl[1], pages: [] }; chunks.push(cur); }
+          cur.y1 = sl[1];
+          cur.pages.push(sl);
+        });
+
+        let pageNo = 0;
+        for (const ch of chunks) {
+          setStatus(`Page ${pageNo + 1}–${pageNo + ch.pages.length} of ${slices.length}…`);
+          const canvas = await window.html2canvas(root, {
+            scale, useCORS: true, allowTaint: false, backgroundColor: '#ffffff', logging: false, imageTimeout: 8000,
+            x: 0, y: ch.y0 + rootTop, width: PDF_W, height: Math.max(1, ch.y1 - ch.y0),
+            windowWidth: PDF_W, windowHeight: Math.max(1200, ch.y1 + rootTop + 50), scrollX: 0, scrollY: 0
           });
-          if (i > 0) pdf.addPage();
-          const img = canvas.toDataURL('image/jpeg', 0.9);
-          pdf.addImage(img, 'JPEG', 0, 0, pageWpt, (y1 - y0) * ratio, undefined, 'FAST');
+          for (const [y0, y1] of ch.pages) {
+            const part = document.createElement('canvas');
+            part.width = canvas.width;
+            part.height = Math.max(1, Math.round((y1 - y0) * scale));
+            const ctx = part.getContext('2d');
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, part.width, part.height);
+            ctx.drawImage(canvas, 0, Math.round((y0 - ch.y0) * scale), canvas.width, part.height, 0, 0, part.width, part.height);
+            if (pageNo > 0) pdf.addPage();
+            pdf.addImage(part.toDataURL('image/jpeg', 0.85), 'JPEG', 0, 0, pageWpt, (y1 - y0) * ratio, undefined, 'FAST');
+            pageNo++;
+          }
         }
         pdf.save(pdfFileName());
-        window.scrollTo(0, prevScroll);
         setStatus('✓ PDF downloaded');
         showToast('PDF downloaded ✓');
       } catch (err) {
@@ -2049,8 +2084,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         setStatus('');
         showToast('Direct PDF failed (check internet) — use Print');
       } finally {
-        if (host) host.remove();
-        if (cover) cover.remove();
+        if (built && built.frame) built.frame.remove();
         if (btn) { btn.disabled = false; btn.style.opacity = ''; }
         pdfBusy = false;
       }
