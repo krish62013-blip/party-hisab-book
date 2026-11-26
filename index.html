@@ -897,139 +897,267 @@
     const GAS_LAST_SYNC_KEY = 'hisab_gas_last_sync';
     const DEFAULT_EXEC_URL = 'https://script.google.com/macros/s/AKfycbxiA7lRPyEpk0atCZLWVY4T4FmdT0vwjSKNxnzuxmJZYDtFf274cot5VMy8b5wGo8cHzQ/exec';
 
-    const GAS_BACKEND_CODE = `// Google Apps Script Backend (Code.gs)
+    const GAS_BACKEND_CODE = `// Google Apps Script Backend (Code.gs) - Party Hisab Book
+// After pasting: Deploy > Manage deployments > Edit (pencil) > Version: New version > Deploy.
+// Who has access must be "Anyone". Execute as "Me".
 const FOLDER_NAME = 'Party_Hisab_Proofs';
+// Your "Party Hisab Book Live" spreadsheet. Leave as-is unless you move to a new sheet.
+const SPREADSHEET_ID = '14jp0hrU_fz-ROi9EER4E1nAYdnd2EBegSHEaR3JgSes';
 
 function doGet(e) {
-  const action = (e && e.parameter && e.parameter.action) || 'PING';
-  const callback = (e && e.parameter && e.parameter.callback) || '';
-  let result = { ok: true, message: 'Party Hisab Book Backend Active' };
+  const p = (e && e.parameter) || {};
+  const action = p.action || 'PING';
+  let result = { ok: true, message: 'Party Hisab Book Backend Active', version: 3 };
   try {
     if (action === 'LOAD_ALL' || action === 'pull') result = loadAllData();
   } catch (err) {
-    result = { ok: false, error: err.toString() };
+    result = { ok: false, error: String(err) };
   }
-  return outputResponse(result, callback);
+  return outputResponse(result, p.callback || '');
 }
 
 function doPost(e) {
-  const callback = (e && e.parameter && e.parameter.callback) || '';
+  const p = (e && e.parameter) || {};
   let result = { ok: false, error: 'Unknown action' };
   try {
-    const raw = (e && e.parameter && e.parameter.payload) || (e && e.postData && e.postData.contents) || '{}';
+    const raw = p.payload || (e && e.postData && e.postData.contents) || '{}';
     const payload = JSON.parse(raw);
     if (payload.action === 'SYNC_ALL' || payload.action === 'pushAll') {
       syncAllToSheets(payload.data);
       result = { ok: true, syncedAt: new Date().toISOString() };
     } else if (payload.action === 'UPLOAD_PROOF') {
-      const url = saveProofToDrive(payload.partyName, payload.fileName, payload.base64Data);
-      result = { ok: true, url: url };
+      result = { ok: true, url: saveProofToDrive(payload.partyName, payload.fileName, payload.base64Data) };
     }
   } catch (err) {
-    result = { ok: false, error: err.toString() };
+    result = { ok: false, error: String(err) };
   }
-  return outputResponse(result, callback);
+  return outputResponse(result, p.callback || '');
 }
 
 function outputResponse(obj, callback) {
   const jsonStr = JSON.stringify(obj);
-  if (callback) {
+  if (callback && /^[A-Za-z0-9_$.]+$/.test(callback)) {
     return ContentService.createTextOutput(callback + '(' + jsonStr + ')').setMimeType(ContentService.MimeType.JAVASCRIPT);
   }
   return ContentService.createTextOutput(jsonStr).setMimeType(ContentService.MimeType.JSON);
 }
 
-function getOrCreateSheet(ss, name, headers) {
-  let sh = ss.getSheetByName(name);
-  if (!sh) {
-    sh = ss.insertSheet(name);
-    sh.appendRow(headers);
-    sh.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+function getBook() {
+  if (SPREADSHEET_ID) {
+    try { return SpreadsheetApp.openById(SPREADSHEET_ID); } catch (e) {}
   }
-  return sh;
+  const active = SpreadsheetApp.getActiveSpreadsheet();
+  if (!active) throw new Error('Spreadsheet not found. Set SPREADSHEET_ID in Code.gs.');
+  return active;
 }
 
-function overwriteRows(sheet, rows) {
-  const lastRow = sheet.getLastRow();
-  if (lastRow > 1) sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).clearContent();
-  if (rows.length > 0) sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+// ---------- WRITE (always the same column layout) ----------
+const SCHEMA = {
+  Parties: ['Party_ID', 'Code', 'Party_Name', 'Contact', 'City', 'Phone'],
+  Main_Ledger: ['Txn_ID', 'Party_ID', 'Party_Name', 'Date', 'Type', 'Amount', 'Bank_Details', 'Narration', 'Batch_ID', 'Settlement_ID', 'Proof_URL'],
+  UPI_Targets: ['Target_ID', 'Party_ID', 'Party_Name', 'Date', 'Target_Payee', 'Target_UPI', 'Target_Amount', 'Note'],
+  UPI_Payouts: ['UPI_ID', 'Party_ID', 'Party_Name', 'Date', 'Paid_To', 'Payee_UPI', 'Allocated_Target_ID', 'Amount', 'App_Mode', 'UTR', 'Note', 'Status', 'Batch_ID', 'Proof_URL'],
+  Finalized_Batches: ['Batch_ID', 'Party_ID', 'Party_Name', 'Date', 'From_Date', 'To_Date', 'Narration', 'Total_Amount', 'Entry_Count', 'Snapshot_JSON'],
+  Settlements: ['Settlement_ID', 'Party_ID', 'Party_Name', 'From_Date', 'To_Date', 'Opening_BF', 'Total_In', 'Total_Out', 'Closing_OS', 'Settled_On', 'Narration', 'Snapshot_JSON']
+};
+
+function writeSheet(ss, name, rows) {
+  const headers = SCHEMA[name];
+  let sh = ss.getSheetByName(name);
+  if (!sh) sh = ss.insertSheet(name);
+  sh.clearContents();
+  const all = [headers].concat(rows.map(function (r) {
+    return r.map(function (v) { return v === null || v === undefined ? '' : v; });
+  }));
+  sh.getRange(1, 1, all.length, headers.length).setValues(all);
+  sh.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+  sh.setFrozenRows(1);
+}
+
+function cleanProof(v) {
+  return (v && String(v).indexOf('http') === 0) ? String(v) : '';
 }
 
 function syncAllToSheets(data) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
   const parties = (data && data.parties) || [];
-  const shParties = getOrCreateSheet(ss, 'Parties', ['Party_ID', 'Code', 'Party_Name', 'Contact', 'City', 'Phone', 'Raw_JSON']);
-  const shMain = getOrCreateSheet(ss, 'Main_Ledger', ['Txn_ID', 'Party_ID', 'Party_Name', 'Date', 'Type', 'Amount', 'Bank_Details', 'Narration', 'Batch_ID', 'Settlement_ID', 'Proof_URL']);
-  const shTargets = getOrCreateSheet(ss, 'UPI_Targets', ['Target_ID', 'Party_ID', 'Party_Name', 'Date', 'Target_Payee', 'Target_UPI', 'Target_Amount', 'Note']);
-  const shUpi = getOrCreateSheet(ss, 'UPI_Payouts', ['UPI_ID', 'Party_ID', 'Party_Name', 'Date', 'Paid_To', 'Payee_UPI', 'Allocated_Target_ID', 'Amount', 'App_Mode', 'UTR', 'Note', 'Status', 'Batch_ID', 'Proof_URL']);
-  const shBatches = getOrCreateSheet(ss, 'Finalized_Batches', ['Batch_ID', 'Party_ID', 'Party_Name', 'Date', 'From_Date', 'To_Date', 'Narration', 'Total_Amount', 'Entry_Count']);
-  const shSettle = getOrCreateSheet(ss, 'Settlements', ['Settlement_ID', 'Party_ID', 'Party_Name', 'From_Date', 'To_Date', 'Opening_BF', 'Total_In', 'Total_Out', 'Closing_OS', 'Settled_On', 'Narration']);
-  const partyRows = [], mainRows = [], targetRows = [], upiRows = [], batchRows = [], settleRows = [];
-
-  parties.forEach(p => {
-    const slimParty = JSON.parse(JSON.stringify(p));
-    (slimParty.mainLedger || []).forEach(m => { if (m.proofImg && String(m.proofImg).startsWith('data:')) m.proofImg = ''; });
-    (slimParty.upiHisab || []).forEach(u => { if (u.proofImg && String(u.proofImg).startsWith('data:')) u.proofImg = ''; });
-    partyRows.push([p.id, p.code, p.name, p.contact, p.city, p.phone, JSON.stringify(slimParty)]);
-    (p.mainLedger || []).forEach(m => {
-      mainRows.push([m.id, p.id, p.name, m.date, m.type, m.amount, m.bankDetails, m.narration, m.batchId || '', m.settlementId || '', (m.proofImg && String(m.proofImg).startsWith('http')) ? m.proofImg : '']);
+  if (!parties.length) throw new Error('Refusing to overwrite the Sheet with zero parties');
+  const ss = getBook();
+  const out = { Parties: [], Main_Ledger: [], UPI_Targets: [], UPI_Payouts: [], Finalized_Batches: [], Settlements: [] };
+  parties.forEach(function (p) {
+    out.Parties.push([p.id, p.code, p.name, p.contact, p.city, p.phone]);
+    (p.mainLedger || []).forEach(function (m) {
+      out.Main_Ledger.push([m.id, p.id, p.name, m.date, m.type, m.amount, m.bankDetails, m.narration, m.batchId, m.settlementId, cleanProof(m.proofImg)]);
     });
-    (p.upiTargets || []).forEach(t => {
-      targetRows.push([t.id, p.id, p.name, t.date, t.name, t.upiId, t.targetAmount, t.note || '']);
+    (p.upiTargets || []).forEach(function (t) {
+      out.UPI_Targets.push([t.id, p.id, p.name, t.date, t.name, t.upiId, t.targetAmount, t.note]);
     });
-    (p.upiHisab || []).forEach(u => {
-      upiRows.push([u.id, p.id, p.name, u.date, u.payeeName, u.payeeUpi, u.allocatedTargetId || '', u.amount, u.appMode, u.utr, u.note || '', u.status, u.batchId || '', (u.proofImg && String(u.proofImg).startsWith('http')) ? u.proofImg : '']);
+    (p.upiHisab || []).forEach(function (u) {
+      out.UPI_Payouts.push([u.id, p.id, p.name, u.date, u.payeeName, u.payeeUpi, u.allocatedTargetId, u.amount, u.appMode, u.utr, u.note, u.status, u.batchId, cleanProof(u.proofImg)]);
     });
-    (p.finalizedBatches || []).forEach(b => {
-      batchRows.push([b.id, p.id, p.name, b.date, b.fromDate, b.toDate, b.narration, b.totalAmount, b.entryCount]);
+    (p.finalizedBatches || []).forEach(function (b) {
+      out.Finalized_Batches.push([b.id, p.id, p.name, b.date, b.fromDate, b.toDate, b.narration, b.totalAmount, b.entryCount, JSON.stringify(b.targetSnapshot || [])]);
     });
-    (p.settlements || []).forEach(s => {
-      settleRows.push([s.id, p.id, p.name, s.fromDate, s.toDate, s.openingBf, s.totalIn, s.totalOut, s.closingOs, s.settledOn, s.narration]);
+    (p.settlements || []).forEach(function (s) {
+      out.Settlements.push([s.id, p.id, p.name, s.fromDate, s.toDate, s.openingBf, s.totalIn, s.totalOut, s.closingOs, s.settledOn, s.narration, JSON.stringify(s.entriesSnapshot || [])]);
     });
   });
+  Object.keys(out).forEach(function (name) { writeSheet(ss, name, out[name]); });
+}
 
-  overwriteRows(shParties, partyRows);
-  overwriteRows(shMain, mainRows);
-  overwriteRows(shTargets, targetRows);
-  overwriteRows(shUpi, upiRows);
-  overwriteRows(shBatches, batchRows);
-  overwriteRows(shSettle, settleRows);
+// ---------- READ (understands both the old and the new column layouts) ----------
+function readSheet(ss, name) {
+  const sh = ss.getSheetByName(name);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const tz = ss.getSpreadsheetTimeZone();
+  const vals = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues();
+  const keys = vals[0].map(function (h) { return String(h).toLowerCase().replace(/[^a-z0-9]/g, ''); });
+  const rows = [];
+  for (let i = 1; i < vals.length; i++) {
+    const o = {};
+    let any = false;
+    keys.forEach(function (k, c) {
+      let v = vals[i][c];
+      if (v instanceof Date) v = Utilities.formatDate(v, tz, 'yyyy-MM-dd');
+      if (v !== '' && v !== null) any = true;
+      if (k && !(k in o)) o[k] = v;
+    });
+    if (any) rows.push(o);
+  }
+  return rows;
+}
+
+function pick(o) {
+  for (let i = 1; i < arguments.length; i++) {
+    const v = o[arguments[i]];
+    if (v !== undefined && v !== null && v !== '') return v;
+  }
+  return '';
+}
+function str(v) { return v === null || v === undefined ? '' : String(v).trim(); }
+function num(v) { const n = Number(String(v).replace(/[^0-9.-]/g, '')); return isNaN(n) ? 0 : n; }
+function day(v) { const s = str(v); return /^\\d{4}-\\d{2}-\\d{2}/.test(s) ? s.slice(0, 10) : s; }
+function orNull(v) { const s = str(v); return s ? s : null; }
+function parseJson(v, fallback) { try { const x = JSON.parse(str(v)); return x || fallback; } catch (e) { return fallback; } }
+
+function ledgerType(t, batchId) {
+  const s = str(t).toUpperCase().replace(/\\s+/g, '_');
+  if (s === 'RECEIVED' || s === 'OS_BF' || s === 'UPI_CLUB' || s === 'CASH_RETURN') return s;
+  if (s.indexOf('BF') > -1 || s.indexOf('OPENING') > -1) return 'OS_BF';
+  if (s.indexOf('RECEIV') > -1 || s === 'IN' || s === 'CREDIT') return 'RECEIVED';
+  return batchId ? 'UPI_CLUB' : 'CASH_RETURN';
+}
+function upiStatus(s, batchId) {
+  const v = str(s).toUpperCase();
+  if (v === 'OPEN') return 'OPEN';
+  if (v === 'CLUBBED' || v === 'FINALIZED' || v === 'SETTLED' || batchId) return 'CLUBBED';
+  return 'OPEN';
+}
+function codeFor(name) {
+  const w = str(name).split(/\\s+/).filter(String);
+  return ((w[0] || 'P').charAt(0) + (w[1] || w[0] || 'X').charAt(w[1] ? 0 : 1)).toUpperCase();
 }
 
 function loadAllData() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const shParties = ss.getSheetByName('Parties');
-  const parties = [];
-  if (shParties && shParties.getLastRow() >= 2) {
-    const vals = shParties.getRange(2, 1, shParties.getLastRow() - 1, shParties.getLastColumn()).getValues();
-    vals.forEach(r => {
-      for (let c = r.length - 1; c >= 0; c--) {
-        if (typeof r[c] === 'string' && r[c].trim().startsWith('{')) {
-          try { parties.push(JSON.parse(r[c])); break; } catch (e) {}
-        }
-      }
-    });
-  }
-  function sheetToObjects(sheetName, headers) {
-    const sh = ss.getSheetByName(sheetName);
-    if (!sh || sh.getLastRow() < 2) return [];
-    return sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getValues().map(r => {
-      const obj = {};
-      headers.forEach((h, i) => { obj[h] = r[i]; });
-      return obj;
-    });
-  }
-  return {
-    ok: true,
-    data: {
-      parties,
-      mainLedger: sheetToObjects('Main_Ledger', ['id', 'partyId', 'partyName', 'date', 'type', 'amount', 'bankDetails', 'narration', 'batchId', 'settlementId', 'proofUrl']),
-      upiTargets: sheetToObjects('UPI_Targets', ['id', 'partyId', 'partyName', 'date', 'name', 'upiId', 'targetAmount', 'note']),
-      upiPayouts: sheetToObjects('UPI_Payouts', ['id', 'partyId', 'partyName', 'date', 'payeeName', 'payeeUpi', 'allocatedTargetId', 'amount', 'appMode', 'utr', 'note', 'status', 'batchId', 'proofUrl']),
-      finalizedBatches: sheetToObjects('Finalized_Batches', ['id', 'partyId', 'partyName', 'date', 'fromDate', 'toDate', 'narration', 'totalAmount', 'entryCount']),
-      settlements: sheetToObjects('Settlements', ['id', 'partyId', 'partyName', 'fromDate', 'toDate', 'openingBf', 'totalIn', 'totalOut', 'closingOs', 'settledOn', 'narration'])
+  const ss = getBook();
+  const map = {};
+  const order = [];
+  function party(id, name) {
+    id = str(id) || 'P-1';
+    if (!map[id]) {
+      map[id] = { id: id, code: codeFor(name || id), name: str(name) || id, contact: '', city: '', phone: '', mainLedger: [], upiTargets: [], upiHisab: [], finalizedBatches: [], settlements: [] };
+      order.push(id);
     }
-  };
+    if (name && map[id].name === id) map[id].name = str(name);
+    return map[id];
+  }
+
+  readSheet(ss, 'Parties').forEach(function (r) {
+    const raw = pick(r, 'rawjson');
+    const fromJson = raw ? parseJson(raw, null) : null;
+    const p = party(pick(r, 'partyid', 'id'), pick(r, 'partyname', 'name'));
+    p.code = str(pick(r, 'code')) || (fromJson && fromJson.code) || p.code;
+    p.contact = str(pick(r, 'contact')) || (fromJson && fromJson.contact) || '';
+    p.city = str(pick(r, 'city')) || (fromJson && fromJson.city) || '';
+    p.phone = str(pick(r, 'phone')) || (fromJson && fromJson.phone) || '';
+  });
+
+  readSheet(ss, 'Main_Ledger').forEach(function (r) {
+    const batchId = orNull(pick(r, 'batchid'));
+    party(pick(r, 'partyid'), pick(r, 'partyname')).mainLedger.push({
+      id: str(pick(r, 'txnid', 'id')) || ('M-' + Math.random().toString(36).slice(2)),
+      date: day(pick(r, 'date')),
+      type: ledgerType(pick(r, 'type'), batchId),
+      amount: num(pick(r, 'amount')),
+      bankDetails: str(pick(r, 'bankdetails', 'mode')),
+      narration: str(pick(r, 'narration', 'notes', 'note')),
+      batchId: batchId,
+      settlementId: orNull(pick(r, 'settlementid')),
+      proofImg: orNull(pick(r, 'proofurl'))
+    });
+  });
+
+  readSheet(ss, 'UPI_Targets').forEach(function (r) {
+    party(pick(r, 'partyid'), pick(r, 'partyname')).upiTargets.push({
+      id: str(pick(r, 'targetid', 'id')) || ('TGT-' + Math.random().toString(36).slice(2)),
+      date: day(pick(r, 'date')),
+      name: str(pick(r, 'targetpayee', 'name', 'payeename')),
+      upiId: str(pick(r, 'targetupi', 'upiid', 'payeeupi')),
+      targetAmount: num(pick(r, 'targetamount', 'amount')),
+      note: str(pick(r, 'note', 'notes'))
+    });
+  });
+
+  readSheet(ss, 'UPI_Payouts').forEach(function (r) {
+    const batchId = orNull(pick(r, 'batchid'));
+    // Old layout: "id" = row id, "upiId" = payee UPI. New layout: "UPI_ID" = row id, "Payee_UPI" = payee UPI.
+    const oldLayout = r.hasOwnProperty('id');
+    party(pick(r, 'partyid'), pick(r, 'partyname')).upiHisab.push({
+      id: str(oldLayout ? r.id : r.upiid) || ('U-' + Math.random().toString(36).slice(2)),
+      date: day(pick(r, 'date')),
+      payeeName: str(pick(r, 'paidto', 'payeename', 'recipientname', 'name')),
+      payeeUpi: str(pick(r, 'payeeupi')) || (oldLayout ? str(r.upiid) : ''),
+      allocatedTargetId: orNull(pick(r, 'allocatedtargetid')),
+      amount: num(pick(r, 'amount')),
+      appMode: str(pick(r, 'appmode')),
+      utr: str(pick(r, 'utr')),
+      note: str(pick(r, 'note', 'notes')),
+      status: upiStatus(pick(r, 'status'), batchId),
+      batchId: batchId,
+      proofImg: orNull(pick(r, 'proofurl'))
+    });
+  });
+
+  readSheet(ss, 'Finalized_Batches').forEach(function (r) {
+    const d = day(pick(r, 'date', 'todate'));
+    party(pick(r, 'partyid'), pick(r, 'partyname')).finalizedBatches.push({
+      id: str(pick(r, 'batchid', 'id')),
+      date: d,
+      fromDate: day(pick(r, 'fromdate')) || d,
+      toDate: day(pick(r, 'todate')) || d,
+      narration: str(pick(r, 'narration', 'message')),
+      totalAmount: num(pick(r, 'totalamount', 'totalpaid')),
+      entryCount: num(pick(r, 'entrycount', 'payoutcount')),
+      targetSnapshot: parseJson(pick(r, 'snapshotjson'), [])
+    });
+  });
+
+  readSheet(ss, 'Settlements').forEach(function (r) {
+    const d = day(pick(r, 'settledon', 'date', 'todate'));
+    party(pick(r, 'partyid'), pick(r, 'partyname')).settlements.push({
+      id: str(pick(r, 'settlementid', 'id')),
+      fromDate: day(pick(r, 'fromdate')),
+      toDate: day(pick(r, 'todate')) || d,
+      openingBf: num(pick(r, 'openingbf')),
+      totalIn: num(pick(r, 'totalin')),
+      totalOut: num(pick(r, 'totalout')),
+      closingOs: num(pick(r, 'closingos')),
+      settledOn: d,
+      narration: str(pick(r, 'narration', 'notes')),
+      entriesSnapshot: parseJson(pick(r, 'snapshotjson'), [])
+    });
+  });
+
+  return { ok: true, data: { parties: order.map(function (id) { return map[id]; }) } };
 }
 
 function saveProofToDrive(partyName, fileName, base64Data) {
@@ -1249,11 +1377,11 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       return (safeStorage.getItem(GAS_URL_KEY) || '').trim() || DEFAULT_EXEC_URL;
     }
 
-    function jsonpRequest(url, action) {
+    function jsonpOnce(url, action) {
       return new Promise((resolve, reject) => {
         const cbName = 'gs_cb_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
         const script = document.createElement('script');
-        const timer = setTimeout(() => { cleanup(); reject(new Error('Connection timed out')); }, 14000);
+        const timer = setTimeout(() => { cleanup(); reject(new Error('Connection timed out')); }, 20000);
         function cleanup() {
           clearTimeout(timer);
           try { delete window[cbName]; } catch (e) { window[cbName] = undefined; }
@@ -1265,6 +1393,26 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         script.src = url + sep + 'action=' + encodeURIComponent(action) + '&callback=' + cbName + '&_t=' + Date.now();
         document.body.appendChild(script);
       });
+    }
+
+    // Plain GET (Apps Script sends CORS headers for ContentService output) - works even if the
+    // deployed Code.gs is an older version that ignores ?callback=
+    async function fetchGetOnce(url, action) {
+      const sep = url.indexOf('?') === -1 ? '?' : '&';
+      const resp = await fetch(url + sep + 'action=' + encodeURIComponent(action) + '&_t=' + Date.now(), { method: 'GET', redirect: 'follow', credentials: 'omit' });
+      const text = (await resp.text()).trim();
+      const m = text.match(/^[A-Za-z0-9_$.]+\(([\s\S]*)\);?$/);
+      try { return JSON.parse(m ? m[1] : text); }
+      catch (e) { throw new Error(text.indexOf('<') === 0 ? 'Web App returned a Google page — set Who has access = Anyone and redeploy' : 'Web App returned invalid data'); }
+    }
+
+    async function jsonpRequest(url, action) {
+      try {
+        return await jsonpOnce(url, action);
+      } catch (firstErr) {
+        try { return await fetchGetOnce(url, action); }
+        catch (secondErr) { throw new Error(secondErr && secondErr.message && secondErr.message !== 'Failed to fetch' ? secondErr.message : firstErr.message); }
+      }
     }
 
     function formPostRequest(url, payloadObj) {
@@ -1421,7 +1569,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
           showToast('Pull problem: ' + why);
         }
       } catch (e) {
-        updateCloudSyncBadge('ERROR');
+        updateCloudSyncBadge('ERROR', 'Pull failed: ' + ((e && e.message) || 'connection error'));
         if (showFeedback) showToast('Pull failed — using local data');
       }
     };
