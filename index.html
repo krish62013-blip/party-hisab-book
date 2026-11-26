@@ -465,7 +465,7 @@
           </div>
 
           <div id="upiPayoutsList" class="theme-divide divide-y text-sm"></div>
-          <div id="upiPayoutsFooter" class="px-4 py-3 surface-subtle border-t text-xs font-extrabold theme-text-main flex items-center justify-between"></div>
+          <div id="upiPayoutsFooter" class="px-4 py-3 surface-subtle border-t text-xs font-extrabold theme-text-main flex flex-wrap items-center justify-between gap-2"></div>
         </div>
 
         <div class="surface-card rounded-2xl border overflow-hidden shadow-sm">
@@ -2081,7 +2081,16 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       }).join('');
 
       const fullSum = rows.reduce((acc, item) => acc + (Number(item.amount) || 0), 0);
-      footerEl.innerHTML = `<span>Showing ${visibleRows.length} of ${rows.length} entries (${upiStatusFilter})</span><span class="text-blue-600 num">Total: ${formatINR(fullSum)}</span>`;
+      const moreBtn = rows.length > UPI_INITIAL_VISIBLE_COUNT
+        ? `<button type="button" onclick="window.toggleShowAllUpi()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-extrabold cursor-pointer shadow">${showAllUpiPayouts ? '▲ Show less' : `▼ Show all ${rows.length} entries`}</button>`
+        : '';
+      footerEl.innerHTML = `<span>Showing ${visibleRows.length} of ${rows.length} entries (${upiStatusFilter})</span>${moreBtn}<span class="text-blue-600 num">Total: ${formatINR(fullSum)}</span>`;
+    };
+
+    window.toggleShowAllUpi = function () {
+      showAllUpiPayouts = !showAllUpiPayouts;
+      window.renderUpiPayoutsTable();
+      if (!showAllUpiPayouts) { const el = document.getElementById('upiPayoutsList'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
     };
 
     window.changeUpiAllocation = function (upiId, newTargetId) {
