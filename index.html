@@ -1377,6 +1377,10 @@ function saveProofToDrive(partyName, fileName, base64Data) {
     window.pushAllToGoogleSheet = async function (showFeedback) {
       const url = getGasWebAppUrl();
       if (!url) return;
+      if (!window.__pulledOk) {
+        if (!showFeedback) return; // auto-sync stays off until this device has loaded the Sheet once
+        if (!confirm('This device has not loaded your Sheet data yet. Pushing now can overwrite the Sheet with what is on this phone. Continue anyway?')) return;
+      }
       safeStorage.setItem(GAS_URL_KEY, url);
       updateCloudSyncBadge('SYNCING', 'Syncing...');
       try {
@@ -1404,6 +1408,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         }
         if (json && json.ok && json.data && Array.isArray(json.data.parties) && json.data.parties.length > 0) {
           state = normalizeData(json.data);
+          window.__pulledOk = true;
           saveState(true);
           refreshCurrentScreen();
           const nowStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
@@ -1411,8 +1416,9 @@ function saveProofToDrive(partyName, fileName, base64Data) {
           updateCloudSyncBadge('CONNECTED');
           if (showFeedback) showToast('Latest data pulled from Google Sheet');
         } else {
-          updateCloudSyncBadge('CONNECTED');
-          if (showFeedback) showToast('No additional remote rows found');
+          const why = (json && json.error) ? json.error : 'Sheet returned no parties';
+          updateCloudSyncBadge('ERROR', 'Pull problem: ' + why);
+          showToast('Pull problem: ' + why);
         }
       } catch (e) {
         updateCloudSyncBadge('ERROR');
