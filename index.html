@@ -109,6 +109,41 @@
       color: #0f172a !important;
     }
 
+    /* ===== Colourful look ===== */
+    html:not(.dark-mode) body {
+      background:
+        radial-gradient(1200px 500px at -10% -10%, rgba(99,102,241,0.14), transparent 60%),
+        radial-gradient(900px 500px at 110% 0%, rgba(236,72,153,0.10), transparent 60%),
+        radial-gradient(900px 600px at 50% 110%, rgba(16,185,129,0.10), transparent 60%),
+        var(--bg-app);
+      background-attachment: fixed;
+    }
+    .section-help { font-size: 11px; font-weight: 600; color: var(--text-faint); margin-top: 2px; }
+    .chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 800; line-height: 1.5; white-space: nowrap; border: 1px solid transparent; }
+    .chip-emerald { background: rgba(16,185,129,0.14); color: #047857; border-color: rgba(16,185,129,0.35); }
+    .chip-amber { background: rgba(245,158,11,0.16); color: #b45309; border-color: rgba(245,158,11,0.40); }
+    .chip-rose { background: rgba(244,63,94,0.13); color: #be123c; border-color: rgba(244,63,94,0.35); }
+    .chip-blue { background: rgba(59,130,246,0.14); color: #1d4ed8; border-color: rgba(59,130,246,0.35); }
+    .chip-purple { background: rgba(147,51,234,0.13); color: #7e22ce; border-color: rgba(147,51,234,0.35); }
+    .chip-slate { background: rgba(100,116,139,0.14); color: #334155; border-color: rgba(100,116,139,0.3); }
+    html.dark-mode .chip-emerald { color: #6ee7b7; } html.dark-mode .chip-amber { color: #fcd34d; } html.dark-mode .chip-rose { color: #fda4af; }
+    html.dark-mode .chip-blue { color: #93c5fd; } html.dark-mode .chip-purple { color: #d8b4fe; } html.dark-mode .chip-slate { color: #cbd5e1; }
+    .proof-thumb { width: 38px; height: 38px; border-radius: 10px; overflow: hidden; border: 2px solid #10b981; background: #ecfdf5; padding: 0; box-shadow: 0 2px 6px rgba(16,185,129,0.25); transition: transform .15s ease; }
+    .proof-thumb:hover { transform: scale(1.12); }
+    .proof-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .proof-thumb-broken::after { content: 'SS'; font-size: 10px; font-weight: 800; color: #047857; }
+    /* coloured section headers */
+    #tabPanelUpi > .surface-card:nth-child(1) > div:first-child { background: linear-gradient(90deg, rgba(59,130,246,0.14), rgba(99,102,241,0.06)) !important; border-left: 5px solid #3b82f6; }
+    #tabPanelUpi > .surface-card:nth-child(2) > div:first-child { background: linear-gradient(90deg, rgba(168,85,247,0.15), rgba(236,72,153,0.06)) !important; border-left: 5px solid #a855f7; }
+    #tabPanelUpi > .surface-card:nth-child(3) > div:first-child { background: linear-gradient(90deg, rgba(16,185,129,0.15), rgba(20,184,166,0.06)) !important; border-left: 5px solid #10b981; }
+    #tabPanelMain > .surface-card:nth-child(2) > div:first-child { background: linear-gradient(90deg, rgba(99,102,241,0.15), rgba(16,185,129,0.06)) !important; border-left: 5px solid #6366f1; }
+    #tabPanelMain > .surface-card:nth-child(3) > div:first-child { background: linear-gradient(90deg, rgba(147,51,234,0.15), rgba(236,72,153,0.06)) !important; border-left: 5px solid #9333ea; }
+    #upiPayoutsList > div:nth-child(even), #payeeReconList > div:nth-child(even), #mainLedgerList > div:nth-child(even) { background: rgba(99,102,241,0.035); }
+    main button.rounded-xl { box-shadow: 0 2px 8px rgba(15,23,42,0.10); transition: transform .12s ease, box-shadow .12s ease, filter .12s ease; }
+    main button.rounded-xl:hover { filter: brightness(1.06); box-shadow: 0 4px 14px rgba(79,70,229,0.22); }
+    main button.rounded-xl:active { transform: scale(0.97); }
+    .surface-card.rounded-2xl { border-radius: 1.1rem; }
+
     @media print {
       body * { visibility: hidden !important; }
       #pdfModal, #pdfModal * { visibility: visible !important; }
@@ -352,7 +387,7 @@
 
         <div class="surface-card rounded-2xl border overflow-hidden">
           <div class="px-4 py-3.5 surface-subtle border-b flex flex-wrap items-center justify-between gap-2">
-            <h2 class="font-extrabold text-sm sm:text-base theme-text-main">Active Main Party Ledger</h2>
+            <div><h2 class="font-extrabold text-sm sm:text-base theme-text-main">📒 Active Main Party Ledger</h2><p class="section-help">Money received from the party and money returned (cash / UPI batches)</p></div>
             <div class="flex items-center gap-2">
               <span id="activeCarryForwardBadge" class="hidden px-2.5 py-1 rounded-full bg-purple-600 text-white text-xs font-extrabold num"></span>
               <span id="mainEntryCountLabel" class="px-2.5 py-0.5 rounded-full bg-indigo-600 text-white text-xs font-extrabold">0 active entries</span>
@@ -363,14 +398,14 @@
             <div class="col-span-4">Bank / Narration</div>
             <div class="col-span-2 text-right">Credit / Debit</div>
             <div class="col-span-2 text-right">Running O/S</div>
-            <div class="col-span-2 text-right">Status &amp; Proof</div>
+            <div class="col-span-2 text-right">Proof (Screenshot)</div>
           </div>
           <div id="mainLedgerList" class="theme-divide divide-y text-sm"></div>
         </div>
 
         <div class="surface-card rounded-2xl border overflow-hidden">
           <div class="px-4 py-3.5 surface-subtle border-b flex items-center justify-between">
-            <h3 class="font-extrabold text-sm sm:text-base theme-text-main">Locked O/S Settlement Periods</h3>
+            <div><h3 class="font-extrabold text-sm sm:text-base theme-text-main">🔒 Locked O/S Settlement Periods</h3><p class="section-help">Old periods that are already settled and closed</p></div>
             <span id="settledCountLabel" class="px-2.5 py-0.5 rounded-full bg-purple-600 text-white text-xs font-extrabold">0</span>
           </div>
           <div id="settledHistoryList" class="theme-divide divide-y text-sm"></div>
@@ -382,7 +417,7 @@
         <div class="surface-card rounded-2xl border overflow-hidden shadow-sm">
           <div class="p-4 surface-subtle border-b flex flex-wrap items-center justify-between gap-3">
             <div class="flex flex-wrap items-center gap-2.5">
-              <h2 class="font-extrabold text-sm sm:text-base theme-text-main">Daily UPI / PhonePe Payouts</h2>
+              <div><h2 class="font-extrabold text-sm sm:text-base theme-text-main">💸 Daily UPI / PhonePe Payouts</h2><p class="section-help">Every UPI payment you made on behalf of this party</p></div>
               <div class="inline-flex p-1 rounded-xl surface-card border">
                 <button type="button" onclick="window.setUpiStatusFilter('OPEN')" id="btnUpiOpen" class="px-2.5 py-1 rounded-lg text-xs font-extrabold bg-blue-600 text-white cursor-pointer">Open</button>
                 <button type="button" onclick="window.setUpiStatusFilter('CLUBBED')" id="btnUpiClubbed" class="px-2.5 py-1 rounded-lg text-xs font-bold theme-text-muted cursor-pointer">Clubbed</button>
@@ -415,7 +450,7 @@
         <div class="surface-card rounded-2xl border overflow-hidden shadow-sm">
           <div class="p-4 surface-subtle border-b flex flex-wrap items-center justify-between gap-3">
             <div class="flex flex-wrap items-center gap-2.5">
-              <h2 class="font-extrabold text-sm sm:text-base theme-text-main">Third-Party Target &amp; Reconciliation List</h2>
+              <div><h2 class="font-extrabold text-sm sm:text-base theme-text-main">🎯 Third-Party Target &amp; Reconciliation</h2><p class="section-help">How much each person should get vs. how much is paid</p></div>
               <div class="inline-flex p-1 rounded-xl surface-card border">
                 <button type="button" onclick="window.setPayeeFilter('ALL')" id="pillPayeeAll" class="px-2.5 py-1 rounded-lg text-xs font-extrabold bg-purple-600 text-white cursor-pointer">All</button>
                 <button type="button" onclick="window.setPayeeFilter('SHORT')" id="pillPayeeShort" class="px-2.5 py-1 rounded-lg text-xs font-bold theme-text-muted cursor-pointer">Short</button>
@@ -447,7 +482,7 @@
 
         <div class="surface-card rounded-2xl border overflow-hidden shadow-sm">
           <div class="px-4 py-3.5 surface-subtle border-b flex items-center justify-between">
-            <h2 class="font-extrabold text-sm sm:text-base theme-text-main">Finalized &amp; Clubbed UPI Batches Archive</h2>
+            <div><h2 class="font-extrabold text-sm sm:text-base theme-text-main">📦 Finalized &amp; Clubbed UPI Batches</h2><p class="section-help">UPI payments already clubbed into the main ledger</p></div>
             <span id="finalizedBatchCountBadge" class="px-2.5 py-0.5 rounded-full bg-emerald-600 text-white text-xs font-extrabold">0 Batches</span>
           </div>
           <div id="finalizedBatchesList" class="theme-divide divide-y text-sm"></div>
@@ -1780,15 +1815,15 @@ function saveProofToDrive(partyName, fileName, base64Data) {
     function proofAppendixHtml() {
       const list = window.__stmtProofs || [];
       if (!list.length) return '';
-      return '<div style="margin-top:28px;"><h2 style="font-size:16px;font-weight:800;margin-bottom:10px;">Payment proofs</h2>' +
-        list.map((p, i) => `<div id="stmt-proof-${i}" style="border:1px solid #cbd5e1;border-radius:10px;padding:10px;margin-bottom:12px;page-break-inside:avoid;"><div style="font-size:12px;margin-bottom:6px;"><strong>${escapeHTML(p.name)}</strong> • ${formatINR(p.amount)} • ${escapeHTML(formatShortDate(p.date))} • UTR: ${escapeHTML(p.utr || '—')}</div><img src="${p.src}" alt="Proof" style="max-width:100%;max-height:560px;object-fit:contain;"></div>`).join('') + '</div>';
+      return '<div style="margin-top:24px;page-break-before:always;"><h2 style="font-size:16px;font-weight:800;margin-bottom:10px;color:#047857;">📎 Payment proofs / screenshots (' + list.length + ')</h2>' +
+        '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">' + list.map((p, i) => pdfProofCard(p, i, 420)).join('') + '</div></div>';
     }
 
     window.downloadStatementFile = function () {
       const party = getActiveParty();
       const printArea = document.getElementById('pdfPrintArea');
       if (!printArea) return;
-      const htmlDoc = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><title>${escapeHTML(party ? party.name : 'Party Hisab Statement')}</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="bg-white text-slate-900 p-8 max-w-4xl mx-auto">${printArea.innerHTML}${proofAppendixHtml()}<script>window.onload=function(){try{window.print();}catch(e){}};<\/script></body></html>`;
+      const htmlDoc = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><title>${escapeHTML(party ? party.name : 'Party Hisab Statement')}</title><script src="https://cdn.tailwindcss.com"><\/script></head><body class="bg-white text-slate-900 p-8 max-w-4xl mx-auto">${printArea.innerHTML}<script>window.onload=function(){try{window.print();}catch(e){}};<\/script></body></html>`;
       const blob = new Blob([htmlDoc], { type: 'text/html;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1921,6 +1956,12 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       }
     };
 
+    function typeChip(t) {
+      const map = { RECEIVED: ['chip-emerald', '⬇ Received'], CASH_RETURN: ['chip-amber', '💵 Cash Returned'], UPI_CLUB: ['chip-blue', '📲 UPI Batch'], OS_BF: ['chip-purple', '📌 Opening O/S'] };
+      const m = map[t] || ['chip-slate', escapeHTML(t || '')];
+      return `<span class="chip ${m[0]}">${m[1]}</span>`;
+    }
+
     function renderMainLedger() {
       const party = getActiveParty();
       const m = getPartyMetrics(party);
@@ -1935,11 +1976,11 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             const isCredit = e.type === 'RECEIVED' || e.type === 'OS_BF';
             running += isCredit ? amt : -amt;
             return `<div class="p-4 surface-row grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:items-center">
-              <div class="lg:col-span-2 text-xs font-extrabold num">${formatShortDate(e.date)} • ${escapeHTML(e.type)}</div>
+              <div class="lg:col-span-2 text-xs font-extrabold num">${formatShortDate(e.date)}<br>${typeChip(e.type)}</div>
               <div class="lg:col-span-4"><div class="font-extrabold text-sm">${escapeHTML(e.narration)}</div><div class="text-xs theme-text-faint">${escapeHTML(e.bankDetails || '')}</div></div>
               <div class="lg:col-span-2 lg:text-right font-extrabold num ${isCredit ? 'text-emerald-600' : 'text-rose-500'}">${isCredit ? '+' : '-'}${formatINR(amt)}</div>
               <div class="lg:col-span-2 lg:text-right font-extrabold num">${formatINR(running)}</div>
-              <div class="lg:col-span-2 flex justify-end gap-1.5">${e.proofImg ? `<button type="button" onclick="window.openMainProof('${e.id}')" class="px-2.5 py-1 rounded-lg bg-slate-800 text-white text-xs font-extrabold cursor-pointer">Proof</button>` : ''}</div>
+              <div class="lg:col-span-2 flex lg:justify-end gap-1.5">${isRealPhoto(e.proofImg) ? proofThumbsHtml([e], 'openMainProof', '') : (e.proofImg ? `<button type="button" onclick="window.openMainProof('${e.id}')" class="px-2.5 py-1 rounded-lg bg-slate-800 text-white text-xs font-extrabold cursor-pointer">Receipt</button>` : '<span class="text-xs theme-text-faint">No proof</span>')}</div>
             </div>`;
           }).join('');
     }
@@ -1987,10 +2028,10 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         const targetOptions = [`<option value="">-- Unassigned --</option>`, ...(party.upiTargets || []).map(t => `<option value="${t.id}" ${u.allocatedTargetId === t.id ? 'selected' : ''}>${escapeHTML(t.name)} (${formatINR(t.targetAmount)})</option>`)].join('');
         const hasRealPhoto = u.proofImg && !String(u.proofImg).startsWith('data:image/svg+xml');
         const proofCellBtn = hasRealPhoto
-          ? `<button type="button" onclick="window.openUpiProof('${u.id}')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-extrabold cursor-pointer">View SS</button>`
+          ? proofThumbsHtml([u], 'openUpiProof', '')
           : `<button type="button" onclick="window.openUpiProof('${u.id}')" class="px-2.5 py-1.5 rounded-lg bg-slate-700 text-white text-xs font-extrabold cursor-pointer">Receipt</button>`;
         return `<div class="p-4 surface-row grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:items-center">
-          <div class="lg:col-span-3 min-w-0"><div class="text-xs font-extrabold num">${formatShortDate(u.date)} • ${escapeHTML(u.status)}</div><div class="font-extrabold text-sm truncate">${escapeHTML(u.payeeName)}</div><div class="text-xs theme-text-faint truncate">${escapeHTML(u.payeeUpi)}</div></div>
+          <div class="lg:col-span-3 min-w-0"><div class="text-xs font-extrabold num">${formatShortDate(u.date)} ${u.status === 'OPEN' ? '<span class="chip chip-amber">Open</span>' : '<span class="chip chip-emerald">Clubbed</span>'}</div><div class="font-extrabold text-sm truncate">${escapeHTML(u.payeeName)}</div><div class="text-xs theme-text-faint truncate">${escapeHTML(u.payeeUpi)}</div></div>
           <div class="lg:col-span-3">${u.status === 'OPEN' ? `<select onchange="window.changeUpiAllocation('${u.id}', this.value)" class="w-full px-2.5 py-1.5 rounded-xl border text-xs font-bold">${targetOptions}</select>` : `<span class="text-xs font-bold theme-text-muted">Batch Settled</span>`}</div>
           <div class="lg:col-span-2 text-xs"><div class="font-bold">${escapeHTML(u.appMode || 'UPI')}</div><div class="theme-text-faint num">UTR: ${escapeHTML(u.utr || '—')}</div></div>
           <div class="lg:col-span-1 lg:text-right font-extrabold text-sm text-blue-600 num">${formatINR(amt)}</div>
@@ -2058,13 +2099,13 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         : filtered.map(r => {
             const realPhotoEntries = r.matchedEntries.filter(u => u.proofImg && !String(u.proofImg).startsWith('data:image/svg+xml'));
             const proofBtn = realPhotoEntries.length > 0
-              ? `<button type="button" onclick="window.openUpiProof('${realPhotoEntries[realPhotoEntries.length - 1].id}')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-extrabold cursor-pointer">View SS</button>`
+              ? proofThumbsHtml(r.matchedEntries, 'openUpiProof', '')
               : (r.matchedEntries.length > 0 ? `<button type="button" onclick="window.openUpiProof('${r.matchedEntries[r.matchedEntries.length - 1].id}')" class="px-2.5 py-1.5 rounded-lg bg-slate-700 text-white text-xs font-extrabold cursor-pointer">Receipt</button>` : `<span class="text-xs theme-text-faint">—</span>`);
             return `<div class="p-4 surface-row grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:items-center">
               <div class="lg:col-span-3"><div class="font-extrabold text-sm">${escapeHTML(r.name)}</div><div class="text-xs theme-text-faint">${escapeHTML(r.upiId)}</div></div>
               <div class="lg:col-span-2 lg:text-right font-extrabold num">${formatINR(r.targetAmount)}</div>
               <div class="lg:col-span-2 lg:text-right font-extrabold text-blue-600 num">${formatINR(r.paid)}</div>
-              <div class="lg:col-span-2 lg:text-right text-xs font-extrabold num">${r.diff < 0 ? formatINR(Math.abs(r.diff)) + ' Pending' : (r.diff > 0 ? '+' + formatINR(r.diff) + ' Extra' : '₹0 Exact')}</div>
+              <div class="lg:col-span-2 lg:text-right text-xs font-extrabold num">${r.diff < 0 ? '<span class="chip chip-rose">' + formatINR(Math.abs(r.diff)) + ' Pending</span>' : (r.diff > 0 ? '<span class="chip chip-amber">+' + formatINR(r.diff) + ' Extra</span>' : '<span class="chip chip-emerald">✓ Fully Paid</span>')}</div>
               <div class="lg:col-span-1 lg:text-center">${proofBtn}</div>
               <div class="lg:col-span-2 flex justify-end gap-1.5"><button type="button" onclick="window.openEditTargetModal('${r.id}')" class="px-2.5 py-1.5 rounded-lg border theme-border text-xs font-extrabold cursor-pointer">Edit</button></div>
             </div>`;
@@ -2406,10 +2447,34 @@ function saveProofToDrive(partyName, fileName, base64Data) {
     const STMT_TD = 'border:1px solid #cbd5e1;padding:8px;vertical-align:top;word-break:break-word;';
     const STMT_TH = 'border:1px solid #cbd5e1;padding:8px;vertical-align:middle;';
 
+    function isRealPhoto(src) { return !!src && !String(src).startsWith('data:image/svg+xml'); }
+
+    // Small clickable screenshot thumbnails for on-screen lists
+    function proofThumbsHtml(items, openFn, emptyHtml) {
+      const real = items.filter(x => isRealPhoto(x.proofImg));
+      if (!real.length) return emptyHtml;
+      const shown = real.slice(-3);
+      return `<div class="flex items-center justify-center gap-1 flex-wrap">${shown.map(x => `<button type="button" onclick="window.${openFn}('${x.id}')" title="View screenshot" class="proof-thumb cursor-pointer"><img src="${escapeHTML(x.proofImg)}" alt="SS" loading="lazy" onerror="this.parentNode.classList.add('proof-thumb-broken');this.remove();"></button>`).join('')}${real.length > 3 ? `<span class="text-[10px] font-extrabold text-emerald-600">+${real.length - 3}</span>` : ''}</div>`;
+    }
+
+    // Screenshot cards for PDFs (each card is linkable from a "Proof" cell)
+    function pdfProofCard(p, idx, height) {
+      return `<div id="stmt-proof-${idx}" style="border:1px solid #cbd5e1;border-radius:12px;padding:8px;background:#ffffff;page-break-inside:avoid;break-inside:avoid;">
+        <div style="font-size:11px;margin-bottom:6px;line-height:1.4;"><strong>${escapeHTML(p.name)}</strong><br><span style="color:#1d4ed8;font-weight:800;">${formatINR(p.amount)}</span> • ${escapeHTML(formatShortDate(p.date))}${p.utr ? ' • Ref: ' + escapeHTML(p.utr) : ''}</div>
+        <img src="${escapeHTML(p.src)}" alt="Proof" style="display:block;width:100%;max-height:${height || 360}px;object-fit:contain;background:#f8fafc;border-radius:8px;" onerror="this.outerHTML='<div style=&quot;padding:18px;text-align:center;color:#94a3b8;font-size:11px;&quot;>Image could not load</div>';">
+      </div>`;
+    }
+
+    function pdfProofGrid(list, title) {
+      if (!list.length) return '';
+      return `<div style="margin-top:14px;">${title ? `<div style="font-size:12px;font-weight:800;color:#047857;margin-bottom:8px;">${escapeHTML(title)}</div>` : ''}<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">${list.map(p => pdfProofCard(p, p.idx)).join('')}</div></div>`;
+    }
+
     function stmtProofCell(u, name) {
       const src = u.proofImg;
-      if (!src || String(src).startsWith('data:image/svg+xml')) return '<span style="color:#94a3b8;">—</span>';
-      const idx = window.__stmtProofs.push({ src, name, amount: u.amount, date: u.date, utr: u.utr }) - 1;
+      if (!isRealPhoto(src)) return '<span style="color:#94a3b8;">—</span>';
+      const idx = window.__stmtProofs.push({ uid: u.id, src, name, amount: u.amount, date: u.date, utr: u.utr }) - 1;
+      window.__stmtProofs[idx].idx = idx;
       return `<a href="#stmt-proof-${idx}" onclick="return window.openStmtProof ? window.openStmtProof(${idx}) : true" style="display:inline-block;padding:3px 9px;border-radius:6px;background:#1d4ed8;color:#ffffff;font-size:11px;font-weight:700;text-decoration:none;">Proof</a>`;
     }
 
@@ -2463,6 +2528,51 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       return { html, total };
     }
 
+    // Groups OPEN UPI payments by target payee: each party gets its own mini-ledger + its screenshots
+    function partyWiseLedgerHtml(party, entries) {
+      const recon = computeTargetReconciliation(party);
+      const proofIdx = new Map((window.__stmtProofs || []).map(p => [p.uid, p]));
+      const used = new Set();
+      const groups = recon.map(r => {
+        const ids = new Set(r.tranches.map(t => t.id));
+        const list = entries.filter(u => ids.has(u.allocatedTargetId));
+        list.forEach(u => used.add(u.id));
+        return { name: realName(r.name) || r.name || 'Payee', upi: r.upiId, target: r.targetAmount, list };
+      }).filter(g => g.list.length || g.target);
+      const rest = entries.filter(u => !used.has(u.id));
+      if (rest.length) groups.push({ name: 'Unassigned / Direct payments', upi: '', target: null, list: rest });
+      const palette = ['#4f46e5', '#0891b2', '#7c3aed', '#059669', '#db2777', '#d97706', '#2563eb', '#0d9488'];
+      const TD = 'border:1px solid #e2e8f0;padding:6px 8px;vertical-align:top;';
+      return `<div style="margin-top:22px;"><h2 style="font-size:16px;font-weight:800;margin:0 0 10px 0;">Party-wise ledger with screenshots</h2>` + groups.map((g, gi) => {
+        const color = palette[gi % palette.length];
+        const paid = g.list.reduce((s, u) => s + (Number(u.amount) || 0), 0);
+        const bal = g.target === null ? null : paid - g.target;
+        const balTxt = bal === null ? '' : (bal < 0 ? `<span style="color:#e11d48;">${formatINR(Math.abs(bal))} pending</span>` : bal > 0 ? `<span style="color:#d97706;">+${formatINR(bal)} extra</span>` : `<span style="color:#059669;">Fully paid ✓</span>`);
+        const sorted = [...g.list].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+        const photos = [];
+        const rows = sorted.map((u, i) => {
+          let proof = '<span style="color:#94a3b8;">—</span>';
+          const p = proofIdx.get(u.id);
+          if (p) { photos.push(p); proof = `<a href="#stmt-proof-${p.idx}" onclick="return window.openStmtProof ? window.openStmtProof(${p.idx}) : true" style="display:inline-block;padding:2px 8px;border-radius:6px;background:${color};color:#fff;font-size:10px;font-weight:700;text-decoration:none;">Proof</a>`; }
+          return `<tr><td style="${TD}">${i + 1}</td><td style="${TD}white-space:nowrap;">${escapeHTML(formatShortDate(u.date))}</td><td style="${TD}"><strong>${escapeHTML(payeeNameOf(u, party))}</strong>${u.payeeUpi && !/^(na|n\/a|nil|-)$/i.test(String(u.payeeUpi).trim()) ? '<br><span style="font-size:10px;color:#64748b;">' + escapeHTML(u.payeeUpi) + '</span>' : ''}</td><td style="${TD}">${escapeHTML(u.utr || '—')}<br><span style="font-size:10px;color:#64748b;">${escapeHTML(u.appMode || '')}</span></td><td style="${TD}text-align:right;font-weight:800;white-space:nowrap;">${formatINR(u.amount)}</td><td style="${TD}text-align:center;">${proof}</td></tr>`;
+        }).join('');
+        return `<div style="border:2px solid ${color}33;border-radius:14px;overflow:hidden;margin-bottom:16px;page-break-inside:auto;">
+          <div style="background:${color};color:#ffffff;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div><div style="font-size:14px;font-weight:800;">${gi + 1}. ${escapeHTML(g.name)}</div>${g.upi ? `<div style="font-size:11px;opacity:0.85;">${escapeHTML(g.upi)}</div>` : ''}</div>
+            <div style="font-size:11px;font-weight:700;text-align:right;">${g.target !== null ? 'Target: ' + formatINR(g.target) + ' • ' : ''}Paid: ${formatINR(paid)}</div>
+          </div>
+          <div style="padding:10px 12px;">
+            ${balTxt ? `<div style="font-size:12px;font-weight:800;margin-bottom:8px;">Balance: ${balTxt}</div>` : ''}
+            ${sorted.length ? `<div class="stmt-scroll"><table class="stmt-table" style="width:100%;min-width:560px;border-collapse:collapse;font-size:11px;table-layout:fixed;">
+              <colgroup><col style="width:5%"><col style="width:13%"><col style="width:32%"><col style="width:22%"><col style="width:16%"><col style="width:12%"></colgroup>
+              <thead><tr style="background:${color}14;"><th style="${TD}text-align:left;">#</th><th style="${TD}text-align:left;">Date</th><th style="${TD}text-align:left;">Paid To</th><th style="${TD}text-align:left;">UTR / App</th><th style="${TD}text-align:right;">Amount</th><th style="${TD}">Proof</th></tr></thead>
+              <tbody>${rows}<tr style="background:#f8fafc;font-weight:800;"><td colspan="4" style="${TD}text-align:right;">Total paid</td><td style="${TD}text-align:right;white-space:nowrap;">${formatINR(paid)}</td><td style="${TD}"></td></tr></tbody></table></div>` : '<div style="font-size:11px;color:#64748b;">No payment made yet.</div>'}
+            ${pdfProofGrid(photos, photos.length ? '📎 Screenshots (' + photos.length + ')' : '')}
+          </div>
+        </div>`;
+      }).join('') + `</div>`;
+    }
+
     window.generateCurrentUpiLedgerPDF = function () {
       const party = getActiveParty();
       const openEntries = [...(party.upiHisab || []).filter(u => u.status === 'OPEN')].sort((a, b) => String(a.date).localeCompare(String(b.date)));
@@ -2481,6 +2591,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             </div>
           </div>
           ${tbl.html}
+          ${partyWiseLedgerHtml(party, openEntries)}
         </div>`;
       window.openModal('pdfModal');
     };
@@ -2492,6 +2603,9 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       const totPaid = recon.reduce((s, r) => s + (Number(r.paid) || 0), 0);
       const netDiff = totPaid - totTarget;
       const overallStatus = netDiff < 0 ? `Pending: ${formatINR(Math.abs(netDiff))}` : (netDiff > 0 ? `Surplus: +${formatINR(netDiff)}` : 'Fulfilled (Exact)');
+      const openForProofs = [...(party.upiHisab || []).filter(u => u.status === 'OPEN')].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      window.__stmtProofs = [];
+      openForProofs.forEach(u => stmtProofCell(u, payeeNameOf(u, party)));
 
       document.getElementById('pdfPrintArea').innerHTML = `
         <div style="color:#0f172a;">
@@ -2510,10 +2624,12 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             <div style="padding:12px;border-radius:12px;background:#eff6ff;border:1px solid #bfdbfe;"><div style="font-size:10px;font-weight:800;color:#1d4ed8;">TOTAL PAID</div><div style="font-size:17px;font-weight:800;color:#1e3a8a;margin-top:4px;" class="num">${formatINR(totPaid)}</div></div>
             <div style="padding:12px;border-radius:12px;background:#0f172a;color:#ffffff;"><div style="font-size:10px;font-weight:800;color:#6ee7b7;">NET POSITION</div><div style="font-size:14px;font-weight:800;margin-top:4px;" class="num">${escapeHTML(overallStatus)}</div></div>
           </div>
-          ${recon.map((r, idx) => `<div style="border:1px solid #cbd5e1;border-radius:12px;padding:12px;margin-bottom:10px;font-size:12px;display:flex;justify-content:space-between;align-items:center;">
-            <div><strong style="font-size:13px;">#${idx + 1} ${escapeHTML(realName(r.name) || 'Payee')}</strong>${r.upiId ? '<br><span style="font-size:11px;color:#64748b;">' + escapeHTML(r.upiId) + '</span>' : ''}</div>
-            <div class="num">Target: <strong>${formatINR(r.targetAmount)}</strong> • Paid: <strong style="color:#1d4ed8;">${formatINR(r.paid)}</strong></div>
-          </div>`).join('')}
+          <div class="stmt-scroll"><table class="stmt-table" style="width:100%;min-width:560px;border-collapse:collapse;font-size:12px;table-layout:fixed;">
+            <colgroup><col style="width:6%"><col style="width:36%"><col style="width:18%"><col style="width:18%"><col style="width:22%"></colgroup>
+            <thead><tr style="background:#ede9fe;"><th style="border:1px solid #cbd5e1;padding:7px;text-align:left;">#</th><th style="border:1px solid #cbd5e1;padding:7px;text-align:left;">Target Payee</th><th style="border:1px solid #cbd5e1;padding:7px;text-align:right;">Target</th><th style="border:1px solid #cbd5e1;padding:7px;text-align:right;">Paid</th><th style="border:1px solid #cbd5e1;padding:7px;text-align:right;">Balance</th></tr></thead>
+            <tbody>${recon.map((r, idx) => `<tr><td style="border:1px solid #cbd5e1;padding:7px;">${idx + 1}</td><td style="border:1px solid #cbd5e1;padding:7px;"><strong>${escapeHTML(realName(r.name) || 'Payee')}</strong>${r.upiId ? '<br><span style="font-size:10px;color:#64748b;">' + escapeHTML(r.upiId) + '</span>' : ''}</td><td style="border:1px solid #cbd5e1;padding:7px;text-align:right;" class="num">${formatINR(r.targetAmount)}</td><td style="border:1px solid #cbd5e1;padding:7px;text-align:right;color:#1d4ed8;font-weight:800;" class="num">${formatINR(r.paid)}</td><td style="border:1px solid #cbd5e1;padding:7px;text-align:right;font-weight:800;color:${r.diff < 0 ? '#e11d48' : r.diff > 0 ? '#d97706' : '#059669'};" class="num">${r.diff < 0 ? formatINR(Math.abs(r.diff)) + ' pending' : r.diff > 0 ? '+' + formatINR(r.diff) + ' extra' : 'Exact ✓'}</td></tr>`).join('')}</tbody>
+          </table></div>
+          ${partyWiseLedgerHtml(party, openForProofs)}
         </div>`;
       window.openModal('pdfModal');
     };
@@ -2549,7 +2665,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             <div style="font-size:12px;color:#475569;margin-top:4px;">${escapeHTML(customMsg)}</div>
           </div>
           ${tbl.html}
-          ${attachScreenshots && withPhotos.length ? `<div style="margin-top:16px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">${withPhotos.map(u => `<div style="border:1px solid #cbd5e1;border-radius:10px;padding:8px;"><img src="${u.proofImg}" alt="Proof" style="width:100%;height:160px;object-fit:contain;"><div style="font-size:11px;font-weight:800;margin-top:6px;">${escapeHTML(payeeNameOf(u, party))} — ${formatINR(u.amount)}</div></div>`).join('')}</div>` : ''}
+          ${attachScreenshots && withPhotos.length ? proofAppendixHtml() : ''}
         </div>`;
       window.openModal('pdfModal');
     }
@@ -2559,21 +2675,23 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       const m = getPartyMetrics(party);
       const sorted = [...m.activeEntries].sort((a, b) => String(a.date).localeCompare(String(b.date)));
       let running = 0;
+      window.__stmtProofs = [];
       document.getElementById('pdfPrintArea').innerHTML = `
         <div style="color:#0f172a;">
           <div style="border-bottom:2px solid #0f172a;padding-bottom:12px;margin-bottom:14px;">
             <div style="font-size:11px;font-weight:800;color:#4338ca;text-transform:uppercase;">Party Hisab Book • Main Party Statement</div>
             <h1 style="font-size:20px;font-weight:800;margin:4px 0 0 0;">${escapeHTML(party.name)}</h1>
           </div>
-          <div class="stmt-scroll"><table class="stmt-table" style="width:100%;min-width:600px;table-layout:fixed;border-collapse:collapse;border:1px solid #cbd5e1;font-size:12px;"><colgroup><col style="width:14%"><col style="width:46%"><col style="width:20%"><col style="width:20%"></colgroup>
-            <thead><tr style="background:#f1f5f9;"><th style="border:1px solid #cbd5e1;padding:8px;text-align:left;">Date</th><th style="border:1px solid #cbd5e1;padding:8px;text-align:left;">Particulars</th><th style="border:1px solid #cbd5e1;padding:8px;text-align:right;">Amount (₹)</th><th style="border:1px solid #cbd5e1;padding:8px;text-align:right;">Balance O/S</th></tr></thead>
+          <div class="stmt-scroll"><table class="stmt-table" style="width:100%;min-width:660px;table-layout:fixed;border-collapse:collapse;border:1px solid #cbd5e1;font-size:12px;"><colgroup><col style="width:13%"><col style="width:41%"><col style="width:18%"><col style="width:18%"><col style="width:10%"></colgroup>
+            <thead><tr style="background:#f1f5f9;"><th style="border:1px solid #cbd5e1;padding:8px;text-align:left;">Date</th><th style="border:1px solid #cbd5e1;padding:8px;text-align:left;">Particulars</th><th style="border:1px solid #cbd5e1;padding:8px;text-align:right;">Amount (₹)</th><th style="border:1px solid #cbd5e1;padding:8px;text-align:right;">Balance O/S</th><th style="border:1px solid #cbd5e1;padding:8px;text-align:center;">Proof</th></tr></thead>
             <tbody>${sorted.map(e => {
               const amt = Number(e.amount) || 0;
               const isCredit = e.type === 'RECEIVED' || e.type === 'OS_BF';
               running += isCredit ? amt : -amt;
-              return `<tr><td style="border:1px solid #cbd5e1;padding:8px;" class="num">${formatShortDate(e.date)}</td><td style="border:1px solid #cbd5e1;padding:8px;">${escapeHTML(e.narration)}</td><td style="border:1px solid #cbd5e1;padding:8px;text-align:right;font-weight:700;" class="num">${isCredit ? '+' : '-'}${formatINR(amt)}</td><td style="border:1px solid #cbd5e1;padding:8px;text-align:right;font-weight:800;" class="num">${formatINR(running)}</td></tr>`;
+              return `<tr><td style="border:1px solid #cbd5e1;padding:8px;" class="num">${formatShortDate(e.date)}</td><td style="border:1px solid #cbd5e1;padding:8px;">${escapeHTML(e.narration)}${e.bankDetails ? '<br><span style="font-size:10px;color:#64748b;">' + escapeHTML(e.bankDetails) + '</span>' : ''}</td><td style="border:1px solid #cbd5e1;padding:8px;text-align:right;font-weight:700;color:${isCredit ? '#047857' : '#be123c'};" class="num">${isCredit ? '+' : '-'}${formatINR(amt)}</td><td style="border:1px solid #cbd5e1;padding:8px;text-align:right;font-weight:800;" class="num">${formatINR(running)}</td><td style="border:1px solid #cbd5e1;padding:8px;text-align:center;">${stmtProofCell({ id: e.id, proofImg: e.proofImg, amount: e.amount, date: e.date, utr: e.bankDetails }, e.narration || e.type)}</td></tr>`;
             }).join('')}</tbody>
           </table></div>
+          ${proofAppendixHtml()}
         </div>`;
       window.openModal('pdfModal');
     };
