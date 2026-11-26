@@ -1491,6 +1491,8 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         if (!iframe) {
           iframe = document.createElement('iframe');
           iframe.id = 'gs_hidden_iframe';
+          iframe.name = 'gs_hidden_iframe';
+          iframe.setAttribute('aria-hidden', 'true');
           iframe.style.display = 'none';
           document.body.appendChild(iframe);
         }
@@ -1664,7 +1666,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       }
     }
 
-    function compressImageFile(file, maxWidth = 1200, quality = 0.78) {
+    function compressImageFile(file, maxWidth = 1080, quality = 0.72) {
       return new Promise(resolve => {
         if (!file) { resolve(null); return; }
         const reader = new FileReader();
@@ -1684,6 +1686,24 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         reader.onerror = () => resolve(null);
         reader.readAsDataURL(file);
       });
+    }
+
+    // Save instantly with the local photo, then upload to Drive quietly and swap in the Drive link
+    function uploadProofInBackground(partyId, listName, entryId, fileName, dataUrl) {
+      if (!dataUrl || !getGasWebAppUrl()) return;
+      const party = state.parties.find(p => p.id === partyId);
+      if (!party) return;
+      uploadProofToDriveIfConnected(party.name, fileName, dataUrl).then(driveUrl => {
+        if (!driveUrl) return;
+        const p = state.parties.find(x => x.id === partyId);
+        const entry = p && (p[listName] || []).find(x => x.id === entryId);
+        if (entry && entry.proofImg === dataUrl) {
+          entry.proofImg = driveUrl;
+          saveState();
+          try { if (activePartyId === partyId) renderWorkspace(); } catch (e) {}
+          showToast('Screenshot saved to Google Drive ✓');
+        }
+      }).catch(() => {});
     }
 
     async function uploadProofToDriveIfConnected(partyName, fileName, compressedDataUrl) {
@@ -2286,12 +2306,10 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       const appMode = document.getElementById('inpUpiApp').value;
       const utr = document.getElementById('inpUpiUtr').value.trim() || ('UTR' + Math.floor(100000000 + Math.random() * 900000000));
       const note = document.getElementById('inpUpiNote').value.trim();
-      const uploadedImg = await compressImageFile(document.getElementById('inpUpiFile').files?.[0]);
-      let finalProofImg = uploadedImg;
-      if (uploadedImg && getGasWebAppUrl()) {
-        const driveUrl = await uploadProofToDriveIfConnected(party.name, `UPI_${payeeName}_${date}.jpg`, uploadedImg);
-        if (driveUrl) finalProofImg = driveUrl;
-      }
+      const fileInput = document.getElementById('inpUpiFile');
+      const uploadedImg = await compressImageFile(fileInput.files?.[0]);
+      const finalProofImg = uploadedImg;
+      let savedId = editId;
 
       if (editId) {
         const idx = party.upiHisab.findIndex(x => x.id === editId);
@@ -2300,8 +2318,9 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         }
         showToast('UPI entry updated');
       } else {
+        savedId = 'U-' + Date.now();
         party.upiHisab.push({
-          id: 'U-' + Date.now(), date, payeeName, payeeUpi, allocatedTargetId, amount, appMode, utr, note,
+          id: savedId, date, payeeName, payeeUpi, allocatedTargetId, amount, appMode, utr, note,
           status: 'OPEN', batchId: null,
           proofImg: finalProofImg || makeReceiptSVG('UPI', `${payeeName} (${payeeUpi})`, formatINR(amount), formatShortDate(date), utr, appMode)
         });
@@ -2309,7 +2328,9 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       }
       saveState();
       window.closeModal('addUpiModal');
+      if (fileInput) fileInput.value = '';
       renderWorkspace();
+      if (uploadedImg) uploadProofInBackground(party.id, 'upiHisab', savedId, `UPI_${payeeName}_${date}.jpg`, uploadedImg);
     };
 
     window.openAddTargetModal = function () {
@@ -2467,12 +2488,16 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       const date = document.getElementById('inpMainDate').value;
       const bankDetails = document.getElementById('inpMainBank').value.trim();
       const narration = document.getElementById('inpMainNote').value.trim();
-      const uploaded = await compressImageFile(document.getElementById('inpMainFile').files?.[0]);
-      party.mainLedger.push({ id: 'M-' + Date.now(), date, type, amount, bankDetails, narration, batchId: null, settlementId: null, proofImg: uploaded || makeReceiptSVG(type === 'RECEIVED' ? 'BANK' : 'CASH', party.name, formatINR(amount), formatShortDate(date), 'REF-' + Math.floor(10000 + Math.random() * 89999), bankDetails) });
+      const mainFileInput = document.getElementById('inpMainFile');
+      const uploaded = await compressImageFile(mainFileInput.files?.[0]);
+      const newMainId = 'M-' + Date.now();
+      party.mainLedger.push({ id: newMainId, date, type, amount, bankDetails, narration, batchId: null, settlementId: null, proofImg: uploaded || makeReceiptSVG(type === 'RECEIVED' ? 'BANK' : 'CASH', party.name, formatINR(amount), formatShortDate(date), 'REF-' + Math.floor(10000 + Math.random() * 89999), bankDetails) });
       saveState();
       window.closeModal('mainEntryModal');
+      if (mainFileInput) mainFileInput.value = '';
       renderWorkspace();
       showToast('Ledger entry saved');
+      if (uploaded) uploadProofInBackground(party.id, 'mainLedger', newMainId, `MAIN_${type}_${date}.jpg`, uploaded);
     };
 
     window.openSettleModal = function () {
