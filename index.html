@@ -467,6 +467,15 @@
             </div>
           </div>
 
+          <div class="px-4 py-3 border-b theme-border flex flex-wrap items-end gap-2.5" style="background:linear-gradient(90deg, rgba(168,85,247,0.07), rgba(59,130,246,0.05));">
+            <div class="text-xs font-extrabold text-purple-600 w-full sm:w-auto sm:mr-1">📅 Filter by period</div>
+            <div><label class="block text-[10px] font-extrabold theme-text-faint mb-0.5">From</label><input type="date" id="reconFromDate" onchange="window.applyReconDateFilter()" class="px-2.5 py-1.5 rounded-xl border text-xs font-semibold"></div>
+            <div><label class="block text-[10px] font-extrabold theme-text-faint mb-0.5">To</label><input type="date" id="reconToDate" onchange="window.applyReconDateFilter()" class="px-2.5 py-1.5 rounded-xl border text-xs font-semibold"></div>
+            <button type="button" onclick="window.clearReconDateFilter()" class="px-3 py-1.5 rounded-xl border theme-border theme-text-muted text-xs font-extrabold cursor-pointer">Clear</button>
+            <button type="button" id="btnReconFinalize" onclick="window.finalizeReconPeriod()" class="hidden px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-xs font-extrabold cursor-pointer">✅ Finalize this period → Main Ledger</button>
+            <div id="reconPeriodLabel" class="w-full"></div>
+          </div>
+
           <div class="hidden lg:grid lg:grid-cols-12 gap-3 px-4 py-2.5 surface-subtle border-b text-[11px] font-extrabold uppercase tracking-wider theme-text-faint">
             <div class="col-span-3">Date &amp; Target Payee (Name &amp; UPI)</div>
             <div class="col-span-2 text-right">Target Amount</div>
@@ -636,6 +645,11 @@
           <label class="block text-xs font-extrabold theme-text-muted mb-1">Hisab Message / Narration *</label>
           <textarea id="finNarration" rows="2" class="w-full px-3.5 py-2 rounded-xl border text-xs sm:text-sm font-semibold"></textarea>
         </div>
+        <div id="finTargetsInfo" class="text-xs font-bold theme-text-main px-1"></div>
+        <label class="flex items-start gap-2.5 p-3 rounded-xl surface-subtle border cursor-pointer">
+          <input type="checkbox" id="chkFinCloseTargets" checked class="w-4 h-4 mt-0.5 text-emerald-600 rounded">
+          <span class="text-xs font-bold theme-text-main">Also finalize the targets of this period<br><span class="theme-text-faint font-semibold">Fully paid targets are closed. If a payee is still short, only the pending balance stays as a new target (carried forward).</span></span>
+        </label>
         <label class="flex items-center gap-2.5 p-3 rounded-xl surface-subtle border cursor-pointer">
           <input type="checkbox" id="chkFinAttachScreenshots" checked class="w-4 h-4 text-emerald-600 rounded">
           <span class="text-xs font-bold theme-text-main">Attach Payment Screenshots in Finalized PDF</span>
@@ -2064,8 +2078,17 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       renderPayeeReconciliation();
     };
 
-    function computeTargetReconciliation(party) {
-      const openEntries = (party.upiHisab || []).filter(u => u.status === 'OPEN');
+    let reconFrom = '', reconTo = '';
+    function inRange(d, from, to) { d = String(d || '').slice(0, 10); return (!from || d >= from) && (!to || d <= to); }
+    function reconRange() { return (reconFrom || reconTo) ? { from: reconFrom, to: reconTo } : null; }
+    function periodLabel(r) { return r ? `${r.from ? formatShortDate(r.from) : 'Start'} → ${r.to ? formatShortDate(r.to) : 'Today'}` : ''; }
+    // "09 Nov 2026 ₹20,000 • 13 Nov 2026 ₹30,000" – every date a target was given to this payee
+    function trancheDatesText(r) { return (r.tranches || []).map(t => `${formatShortDate(t.date)} ${formatINR(t.targetAmount)}`).join(' • '); }
+
+    // range (optional): only payees with a target date or payment date in the period; payments limited to the period.
+    // All target dates of an included payee are kept, so a payee given targets on 2 dates shows both.
+    function computeTargetReconciliation(party, range) {
+      const openEntries = (party.upiHisab || []).filter(u => u.status === 'OPEN' && (!range || inRange(u.date, range.from, range.to)));
       const targets = (party.upiTargets || []).filter(t => t.status !== 'FINALIZED' && !t.batchId);
       const groupMap = new Map();
       targets.forEach(t => {
@@ -2082,6 +2105,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         const matched = openEntries.filter(u => ids.has(u.allocatedTargetId));
         const paid = matched.reduce((acc, u) => acc + (Number(u.amount) || 0), 0);
         const diff = paid - combinedTarget;
+        if (range && !matched.length && !sorted.some(t => inRange(t.date, range.from, range.to))) return;
         out.push({ ...primary, tranches: sorted, isMultiDate: sorted.length > 1, targetAmount: combinedTarget, paid, diff, status: diff < 0 ? 'SHORT' : diff > 0 ? 'EXCESS' : 'FULFILLED', matchedEntries: matched });
       });
       return out;
@@ -2089,8 +2113,13 @@ function saveProofToDrive(partyName, fileName, base64Data) {
 
     function renderPayeeReconciliation() {
       const party = getActiveParty();
-      const allRecon = computeTargetReconciliation(party);
+      const range = reconRange();
+      const allRecon = computeTargetReconciliation(party, range);
       const filtered = allRecon.filter(r => payeeStatusFilter === 'ALL' || r.status === payeeStatusFilter);
+      const pl = document.getElementById('reconPeriodLabel');
+      if (pl) pl.innerHTML = range ? `<span class="chip chip-purple">📅 Period: ${periodLabel(range)} • ${allRecon.length} payees</span>` : '<span class="section-help">Showing all open targets (no date filter)</span>';
+      const fb = document.getElementById('btnReconFinalize');
+      if (fb) fb.classList.toggle('hidden', !range);
       const totTarget = allRecon.reduce((s, r) => s + (Number(r.targetAmount) || 0), 0);
       const totPaid = allRecon.reduce((s, r) => s + (Number(r.paid) || 0), 0);
 
@@ -2102,7 +2131,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
               ? proofThumbsHtml(r.matchedEntries, 'openUpiProof', '')
               : (r.matchedEntries.length > 0 ? `<button type="button" onclick="window.openUpiProof('${r.matchedEntries[r.matchedEntries.length - 1].id}')" class="px-2.5 py-1.5 rounded-lg bg-slate-700 text-white text-xs font-extrabold cursor-pointer">Receipt</button>` : `<span class="text-xs theme-text-faint">—</span>`);
             return `<div class="p-4 surface-row grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:items-center">
-              <div class="lg:col-span-3"><div class="font-extrabold text-sm">${escapeHTML(r.name)}</div><div class="text-xs theme-text-faint">${escapeHTML(r.upiId)}</div></div>
+              <div class="lg:col-span-3"><div class="font-extrabold text-sm">${escapeHTML(r.name)} ${r.isMultiDate ? `<span class="chip chip-blue">${r.tranches.length} dates</span>` : ''}</div><div class="text-xs theme-text-faint">${escapeHTML(r.upiId)}</div><div class="mt-1 flex flex-wrap gap-1">${r.tranches.map(t => `<span class="chip chip-slate num">🎯 ${formatShortDate(t.date)} • ${formatINR(t.targetAmount)}</span>`).join('')}</div></div>
               <div class="lg:col-span-2 lg:text-right font-extrabold num">${formatINR(r.targetAmount)}</div>
               <div class="lg:col-span-2 lg:text-right font-extrabold text-blue-600 num">${formatINR(r.paid)}</div>
               <div class="lg:col-span-2 lg:text-right text-xs font-extrabold num">${r.diff < 0 ? '<span class="chip chip-rose">' + formatINR(Math.abs(r.diff)) + ' Pending</span>' : (r.diff > 0 ? '<span class="chip chip-amber">+' + formatINR(r.diff) + ' Extra</span>' : '<span class="chip chip-emerald">✓ Fully Paid</span>')}</div>
@@ -2111,7 +2140,24 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             </div>`;
           }).join('');
 
-      document.getElementById('payeeReconFooter').innerHTML = `<span>Total Target: <strong class="num">${formatINR(totTarget)}</strong> • Paid: <strong class="text-blue-600 num">${formatINR(totPaid)}</strong></span>`;
+      document.getElementById('payeeReconFooter').innerHTML = `<span>${range ? 'Period ' : ''}Total Target: <strong class="num">${formatINR(totTarget)}</strong> • Paid: <strong class="text-blue-600 num">${formatINR(totPaid)}</strong> • Balance: <strong class="num ${totPaid - totTarget < 0 ? 'text-rose-600' : 'text-emerald-600'}">${formatINR(totPaid - totTarget)}</strong></span>`;
+    }
+
+    window.applyReconDateFilter = function () {
+      reconFrom = document.getElementById('reconFromDate').value || '';
+      reconTo = document.getElementById('reconToDate').value || '';
+      if (reconFrom && reconTo && reconFrom > reconTo) { showToast('From date is after To date'); return; }
+      renderPayeeReconciliation();
+    };
+    window.clearReconDateFilter = function () {
+      reconFrom = reconTo = '';
+      document.getElementById('reconFromDate').value = '';
+      document.getElementById('reconToDate').value = '';
+      renderPayeeReconciliation();
+    };
+    window.finalizeReconPeriod = function () {
+      if (!reconRange()) { showToast('Pick a From / To date first'); return; }
+      window.openFinalizeModal(reconRange());
     }
 
     function renderFinalizedBatches() {
@@ -2253,29 +2299,47 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       renderWorkspace();
     };
 
-    window.openFinalizeModal = function () {
+    window.openFinalizeModal = function (range) {
       const party = getActiveParty();
       const openList = (party.upiHisab || []).filter(u => u.status === 'OPEN');
       if (openList.length === 0) { showToast('No open UPI entries to finalize'); return; }
       const dates = openList.map(u => u.date).sort();
-      document.getElementById('finFromDate').value = dates[0];
-      document.getElementById('finToDate').value = dates[dates.length - 1];
+      document.getElementById('finFromDate').value = (range && range.from) || dates[0];
+      document.getElementById('finToDate').value = (range && range.to) || dates[dates.length - 1];
       document.getElementById('finTargetSelect').innerHTML = [
         `<option value="ALL">All Open UPI Payouts (${openList.length})</option>`,
-        ...(party.upiTargets || []).filter(t => t.status !== 'FINALIZED').map(t => `<option value="${t.id}">Only Target: ${escapeHTML(t.name)}</option>`)
+        ...computeTargetReconciliation(party).map(r => `<option value="${r.id}">Only Target: ${escapeHTML(r.name)}${r.isMultiDate ? ' (' + r.tranches.length + ' dates)' : ''}</option>`)
       ].join('');
       window.previewFinalizeBatch();
       window.openModal('finalizeModal');
     };
 
+    function finalizeSelection(party) {
+      const fromD = document.getElementById('finFromDate').value;
+      const toD = document.getElementById('finToDate').value;
+      const tgtFilter = document.getElementById('finTargetSelect').value;
+      const range = { from: fromD, to: toD };
+      let groups = computeTargetReconciliation(party, range);
+      if (tgtFilter !== 'ALL') groups = groups.filter(r => r.tranches.some(t => t.id === tgtFilter));
+      const groupIds = new Set();
+      groups.forEach(r => r.tranches.forEach(t => groupIds.add(t.id)));
+      const selected = (party.upiHisab || []).filter(u => u.status === 'OPEN' && inRange(u.date, fromD, toD) && (tgtFilter === 'ALL' || groupIds.has(u.allocatedTargetId)));
+      return { fromD, toD, tgtFilter, groups, selected };
+    }
+
     window.previewFinalizeBatch = function () {
       const party = getActiveParty();
       const fromD = document.getElementById('finFromDate').value;
       const toD = document.getElementById('finToDate').value;
-      const tgtFilter = document.getElementById('finTargetSelect').value;
-      const selected = (party.upiHisab || []).filter(u => u.status === 'OPEN' && (!fromD || u.date >= fromD) && (!toD || u.date <= toD) && (tgtFilter === 'ALL' || u.allocatedTargetId === tgtFilter));
+      const sel = finalizeSelection(party);
+      const selected = sel.selected;
       const total = selected.reduce((acc, u) => acc + (Number(u.amount) || 0), 0);
       document.getElementById('finCountText').textContent = `${selected.length} entr${selected.length === 1 ? 'y' : 'ies'}`;
+      const pend = sel.groups.filter(r => r.diff < 0);
+      const tInfo = document.getElementById('finTargetsInfo');
+      if (tInfo) tInfo.innerHTML = sel.groups.length
+        ? `<strong>${sel.groups.length} target payee${sel.groups.length > 1 ? 's' : ''}</strong> in this period${pend.length ? ` • <span class="text-rose-600">${pend.length} still pending (${formatINR(pend.reduce((s, r) => s + Math.abs(r.diff), 0))})</span>` : ' • all fully paid ✓'}`
+        : 'No target payees in this period';
       document.getElementById('finAmountText').textContent = formatINR(total);
       document.getElementById('finNarration').value = `Payment hisab from ${formatShortDate(fromD)} to ${formatShortDate(toD)} (${selected.length} UPI payouts)`;
     };
@@ -2284,15 +2348,38 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       const party = getActiveParty();
       const fromD = document.getElementById('finFromDate').value;
       const toD = document.getElementById('finToDate').value;
-      const tgtFilter = document.getElementById('finTargetSelect').value;
+      if (fromD && toD && fromD > toD) { showToast('From date is after To date'); return; }
       const narration = document.getElementById('finNarration').value.trim();
       const attachPhotos = document.getElementById('chkFinAttachScreenshots').checked;
-      const selected = (party.upiHisab || []).filter(u => u.status === 'OPEN' && (!fromD || u.date >= fromD) && (!toD || u.date <= toD) && (tgtFilter === 'ALL' || u.allocatedTargetId === tgtFilter));
+      const closeTargets = document.getElementById('chkFinCloseTargets') ? document.getElementById('chkFinCloseTargets').checked : false;
+      const sel = finalizeSelection(party);
+      const selected = sel.selected;
       if (selected.length === 0) { showToast('No matching open entries'); return; }
       const total = selected.reduce((acc, u) => acc + (Number(u.amount) || 0), 0);
-      const batchId = 'BATCH-0' + ((party.finalizedBatches || []).length + 1);
+      let n = (party.finalizedBatches || []).length + 1;
+      while ((party.finalizedBatches || []).some(b => b.id === 'BATCH-' + String(n).padStart(2, '0'))) n++;
+      const batchId = 'BATCH-' + String(n).padStart(2, '0');
+      // snapshot of every target payee in this period (all target dates kept)
+      const targetSnapshot = sel.groups.map((r, i) => ({ targetId: r.id, name: r.name, upiId: r.upiId, note: r.note || '', targetAmount: r.targetAmount, paidAmount: r.paid, tids: r.tranches.map(t => t.id), dates: r.tranches.map(t => ({ date: t.date, amount: Number(t.targetAmount) || 0 })), date: r.tranches[0] ? r.tranches[0].date : '' }));
       selected.forEach(u => { u.status = 'CLUBBED'; u.batchId = batchId; });
-      party.finalizedBatches.push({ id: batchId, date: toD, fromDate: fromD, toDate: toD, narration, totalAmount: total, entryCount: selected.length });
+      if (closeTargets && sel.groups.length) {
+        const closeIds = new Set();
+        sel.groups.forEach(r => r.tranches.forEach(t => closeIds.add(t.id)));
+        const carry = [];
+        sel.groups.forEach((r, i) => {
+          if (r.diff < 0) carry.push({ id: 'TGT-' + Date.now() + '-' + i, date: toD, name: r.name, upiId: r.upiId, targetAmount: Math.abs(r.diff), note: `Balance carried forward from ${batchId}` });
+        });
+        // payments still open for a closed target (outside this period) move to its carried-forward target
+        party.upiHisab.forEach(u => {
+          if (u.status === 'OPEN' && closeIds.has(u.allocatedTargetId)) {
+            const grp = sel.groups.find(r => r.tranches.some(t => t.id === u.allocatedTargetId));
+            const c = grp && carry.find(x => x.name === grp.name && x.upiId === grp.upiId);
+            u.allocatedTargetId = c ? c.id : null;
+          }
+        });
+        party.upiTargets = (party.upiTargets || []).filter(t => !closeIds.has(t.id)).concat(carry);
+      }
+      party.finalizedBatches.push({ id: batchId, date: toD, fromDate: fromD, toDate: toD, narration, totalAmount: total, entryCount: selected.length, targetSnapshot });
       party.mainLedger.push({ id: 'M-' + Date.now(), date: toD, type: 'UPI_CLUB', amount: total, bankDetails: `UPI Batch (${formatShortDate(fromD)} – ${formatShortDate(toD)})`, narration, batchId, settlementId: null, proofImg: null });
       saveState();
       window.closeModal('finalizeModal');
@@ -2489,6 +2576,16 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       return false;
     };
 
+    // name of a target that was closed in an earlier finalized hisab
+    function closedTargetOf(party, tid) {
+      if (!tid) return null;
+      for (const b of (party.finalizedBatches || [])) {
+        const hit = (b.targetSnapshot || []).find(t => t.targetId === tid || (t.tids || []).indexOf(tid) > -1);
+        if (hit) return hit;
+      }
+      return null;
+    }
+
     function buildUpiStatementTable(entries, party, withRunning) {
       window.__stmtProofs = [];
       let running = 0, total = 0;
@@ -2500,7 +2597,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             return `<strong style="font-size:13px;">${escapeHTML(payeeNameOf(u, party))}</strong>` + (upi ? `<br><span style="font-size:11px;color:#475569;">${escapeHTML(upi)}</span>` : '');
         } },
         { h: 'Target Party', w: withRunning ? 17 : 20, a: 'left', c: u => {
-            const t = (party.upiTargets || []).find(x => x.id === u.allocatedTargetId);
+            const t = (party.upiTargets || []).find(x => x.id === u.allocatedTargetId) || closedTargetOf(party, u.allocatedTargetId);
             const tn = t ? realName(t.name) : '';
             return tn ? `<strong>${escapeHTML(tn)}</strong>` : '<span style="color:#94a3b8;">Unassigned</span>';
         } },
@@ -2529,15 +2626,15 @@ function saveProofToDrive(partyName, fileName, base64Data) {
     }
 
     // Groups OPEN UPI payments by target payee: each party gets its own mini-ledger + its screenshots
-    function partyWiseLedgerHtml(party, entries) {
-      const recon = computeTargetReconciliation(party);
+    function partyWiseLedgerHtml(party, entries, range) {
+      const recon = computeTargetReconciliation(party, range);
       const proofIdx = new Map((window.__stmtProofs || []).map(p => [p.uid, p]));
       const used = new Set();
       const groups = recon.map(r => {
         const ids = new Set(r.tranches.map(t => t.id));
         const list = entries.filter(u => ids.has(u.allocatedTargetId));
         list.forEach(u => used.add(u.id));
-        return { name: realName(r.name) || r.name || 'Payee', upi: r.upiId, target: r.targetAmount, list };
+        return { name: realName(r.name) || r.name || 'Payee', upi: r.upiId, target: r.targetAmount, list, tranches: r.tranches };
       }).filter(g => g.list.length || g.target);
       const rest = entries.filter(u => !used.has(u.id));
       if (rest.length) groups.push({ name: 'Unassigned / Direct payments', upi: '', target: null, list: rest });
@@ -2562,6 +2659,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             <div style="font-size:11px;font-weight:700;text-align:right;">${g.target !== null ? 'Target: ' + formatINR(g.target) + ' • ' : ''}Paid: ${formatINR(paid)}</div>
           </div>
           <div style="padding:10px 12px;">
+            ${g.tranches && g.tranches.length ? `<div style="font-size:11px;margin-bottom:6px;"><strong>Target given on ${g.tranches.length} date${g.tranches.length > 1 ? 's' : ''}:</strong> ${g.tranches.map(t => `<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 8px;border-radius:999px;background:${color}14;border:1px solid ${color}55;font-weight:700;">${escapeHTML(formatShortDate(t.date))} — ${formatINR(t.targetAmount)}${t.note ? ' (' + escapeHTML(t.note) + ')' : ''}</span>`).join('')}</div>` : ''}
             ${balTxt ? `<div style="font-size:12px;font-weight:800;margin-bottom:8px;">Balance: ${balTxt}</div>` : ''}
             ${sorted.length ? `<div class="stmt-scroll"><table class="stmt-table" style="width:100%;min-width:560px;border-collapse:collapse;font-size:11px;table-layout:fixed;">
               <colgroup><col style="width:5%"><col style="width:13%"><col style="width:32%"><col style="width:22%"><col style="width:16%"><col style="width:12%"></colgroup>
@@ -2598,12 +2696,13 @@ function saveProofToDrive(partyName, fileName, base64Data) {
 
     window.generateCombinedTargetLedgerPDF = function () {
       const party = getActiveParty();
-      const recon = computeTargetReconciliation(party);
+      const range = reconRange();
+      const recon = computeTargetReconciliation(party, range);
       const totTarget = recon.reduce((s, r) => s + (Number(r.targetAmount) || 0), 0);
       const totPaid = recon.reduce((s, r) => s + (Number(r.paid) || 0), 0);
       const netDiff = totPaid - totTarget;
       const overallStatus = netDiff < 0 ? `Pending: ${formatINR(Math.abs(netDiff))}` : (netDiff > 0 ? `Surplus: +${formatINR(netDiff)}` : 'Fulfilled (Exact)');
-      const openForProofs = [...(party.upiHisab || []).filter(u => u.status === 'OPEN')].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      const openForProofs = [...(party.upiHisab || []).filter(u => u.status === 'OPEN' && (!range || inRange(u.date, range.from, range.to)))].sort((a, b) => String(a.date).localeCompare(String(b.date)));
       window.__stmtProofs = [];
       openForProofs.forEach(u => stmtProofCell(u, payeeNameOf(u, party)));
 
@@ -2613,6 +2712,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             <div>
               <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:#6d28d9;">Party Hisab Book • Combined Third-Party Target Ledger</div>
               <h1 style="font-size:22px;font-weight:800;margin:4px 0 0 0;">${escapeHTML(party.name)}</h1>
+              ${range ? `<div style="display:inline-block;margin-top:6px;padding:3px 10px;border-radius:999px;background:#ede9fe;color:#5b21b6;font-size:11px;font-weight:800;">Period: ${escapeHTML(periodLabel(range))}</div>` : ''}
               <div style="font-size:12px;color:#475569;">${escapeHTML([party.contact, party.city].filter(Boolean).join(' • '))}</div>
             </div>
             <div style="text-align:right;font-size:12px;">
@@ -2627,9 +2727,9 @@ function saveProofToDrive(partyName, fileName, base64Data) {
           <div class="stmt-scroll"><table class="stmt-table" style="width:100%;min-width:560px;border-collapse:collapse;font-size:12px;table-layout:fixed;">
             <colgroup><col style="width:6%"><col style="width:36%"><col style="width:18%"><col style="width:18%"><col style="width:22%"></colgroup>
             <thead><tr style="background:#ede9fe;"><th style="border:1px solid #cbd5e1;padding:7px;text-align:left;">#</th><th style="border:1px solid #cbd5e1;padding:7px;text-align:left;">Target Payee</th><th style="border:1px solid #cbd5e1;padding:7px;text-align:right;">Target</th><th style="border:1px solid #cbd5e1;padding:7px;text-align:right;">Paid</th><th style="border:1px solid #cbd5e1;padding:7px;text-align:right;">Balance</th></tr></thead>
-            <tbody>${recon.map((r, idx) => `<tr><td style="border:1px solid #cbd5e1;padding:7px;">${idx + 1}</td><td style="border:1px solid #cbd5e1;padding:7px;"><strong>${escapeHTML(realName(r.name) || 'Payee')}</strong>${r.upiId ? '<br><span style="font-size:10px;color:#64748b;">' + escapeHTML(r.upiId) + '</span>' : ''}</td><td style="border:1px solid #cbd5e1;padding:7px;text-align:right;" class="num">${formatINR(r.targetAmount)}</td><td style="border:1px solid #cbd5e1;padding:7px;text-align:right;color:#1d4ed8;font-weight:800;" class="num">${formatINR(r.paid)}</td><td style="border:1px solid #cbd5e1;padding:7px;text-align:right;font-weight:800;color:${r.diff < 0 ? '#e11d48' : r.diff > 0 ? '#d97706' : '#059669'};" class="num">${r.diff < 0 ? formatINR(Math.abs(r.diff)) + ' pending' : r.diff > 0 ? '+' + formatINR(r.diff) + ' extra' : 'Exact ✓'}</td></tr>`).join('')}</tbody>
+            <tbody>${recon.map((r, idx) => `<tr><td style="border:1px solid #cbd5e1;padding:7px;">${idx + 1}</td><td style="border:1px solid #cbd5e1;padding:7px;"><strong>${escapeHTML(realName(r.name) || 'Payee')}</strong>${r.upiId ? '<br><span style="font-size:10px;color:#64748b;">' + escapeHTML(r.upiId) + '</span>' : ''}<br><span style="font-size:10px;color:#6d28d9;font-weight:700;">🎯 ${escapeHTML(trancheDatesText(r))}</span></td><td style="border:1px solid #cbd5e1;padding:7px;text-align:right;" class="num">${formatINR(r.targetAmount)}</td><td style="border:1px solid #cbd5e1;padding:7px;text-align:right;color:#1d4ed8;font-weight:800;" class="num">${formatINR(r.paid)}</td><td style="border:1px solid #cbd5e1;padding:7px;text-align:right;font-weight:800;color:${r.diff < 0 ? '#e11d48' : r.diff > 0 ? '#d97706' : '#059669'};" class="num">${r.diff < 0 ? formatINR(Math.abs(r.diff)) + ' pending' : r.diff > 0 ? '+' + formatINR(r.diff) + ' extra' : 'Exact ✓'}</td></tr>`).join('')}</tbody>
           </table></div>
-          ${partyWiseLedgerHtml(party, openForProofs)}
+          ${partyWiseLedgerHtml(party, openForProofs, range)}
         </div>`;
       window.openModal('pdfModal');
     };
@@ -2653,10 +2753,20 @@ function saveProofToDrive(partyName, fileName, base64Data) {
 
     function renderUpiFinalizedBatchPDF(batchTarget, customMsg, attachScreenshots) {
       const party = getActiveParty();
-      const entries = (party.upiHisab || []).filter(u => batchTarget !== 'OPEN' ? u.batchId === batchTarget : u.status === 'OPEN')
+      const pr = batchTarget === 'OPEN' ? reconRange() : null;
+      const entries = (party.upiHisab || []).filter(u => batchTarget !== 'OPEN' ? u.batchId === batchTarget : (u.status === 'OPEN' && (!pr || inRange(u.date, pr.from, pr.to))))
         .sort((a, b) => String(a.date).localeCompare(String(b.date)));
       const tbl = buildUpiStatementTable(entries, party, false);
       const withPhotos = entries.filter(u => u.proofImg && !String(u.proofImg).startsWith('data:image/svg+xml'));
+      const batchObj = batchTarget !== 'OPEN' ? (party.finalizedBatches || []).find(b => b.id === batchTarget) : null;
+      const snap = batchObj
+        ? (Array.isArray(batchObj.targetSnapshot) ? batchObj.targetSnapshot.filter(t => t.dates && t.dates.length) : [])
+        : computeTargetReconciliation(party, pr).map(r => ({ name: r.name, targetAmount: r.targetAmount, paidAmount: r.paid, dates: r.tranches.map(t => ({ date: t.date, amount: Number(t.targetAmount) || 0 })) }));
+      const snapPeriod = batchObj ? `${formatShortDate(batchObj.fromDate)} → ${formatShortDate(batchObj.toDate)}` : (pr ? periodLabel(pr) : 'all open');
+      const snapHtml = snap.length ? `<div style="margin:0 0 14px 0;"><div style="font-size:13px;font-weight:800;color:#6d28d9;margin-bottom:6px;">🎯 Targets in this hisab (${escapeHTML(snapPeriod)})</div>
+        <table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="background:#ede9fe;"><th style="border:1px solid #cbd5e1;padding:6px;text-align:left;">Payee</th><th style="border:1px solid #cbd5e1;padding:6px;text-align:left;">Target dates</th><th style="border:1px solid #cbd5e1;padding:6px;text-align:right;">Target</th><th style="border:1px solid #cbd5e1;padding:6px;text-align:right;">Paid</th><th style="border:1px solid #cbd5e1;padding:6px;text-align:right;">Balance</th></tr></thead><tbody>
+        ${snap.map(t => { const d = (Number(t.paidAmount) || 0) - (Number(t.targetAmount) || 0); return `<tr><td style="border:1px solid #cbd5e1;padding:6px;"><strong>${escapeHTML(realName(t.name) || t.name)}</strong></td><td style="border:1px solid #cbd5e1;padding:6px;">${t.dates.map(x => escapeHTML(formatShortDate(x.date)) + ' — ' + formatINR(x.amount)).join('<br>')}</td><td style="border:1px solid #cbd5e1;padding:6px;text-align:right;">${formatINR(t.targetAmount)}</td><td style="border:1px solid #cbd5e1;padding:6px;text-align:right;font-weight:800;color:#1d4ed8;">${formatINR(t.paidAmount)}</td><td style="border:1px solid #cbd5e1;padding:6px;text-align:right;font-weight:800;color:${d < 0 ? '#e11d48' : d > 0 ? '#d97706' : '#059669'};">${d < 0 ? formatINR(-d) + ' pending' : d > 0 ? '+' + formatINR(d) + ' extra' : 'Exact ✓'}</td></tr>`; }).join('')}
+        </tbody></table></div>` : '';
       document.getElementById('pdfPrintArea').innerHTML = `
         <div style="color:#0f172a;">
           <div style="border-bottom:2px solid #0f172a;padding-bottom:12px;margin-bottom:14px;">
@@ -2664,6 +2774,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             <h1 style="font-size:20px;font-weight:800;margin:4px 0 0 0;">${escapeHTML(party.name)}</h1>
             <div style="font-size:12px;color:#475569;margin-top:4px;">${escapeHTML(customMsg)}</div>
           </div>
+          ${snapHtml}
           ${tbl.html}
           ${attachScreenshots && withPhotos.length ? proofAppendixHtml() : ''}
         </div>`;
