@@ -2528,7 +2528,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
               ? proofThumbsHtml(r.matchedEntries, 'openUpiProof', '')
               : (r.matchedEntries.length > 0 ? `<button type="button" onclick="window.openUpiProof('${r.matchedEntries[r.matchedEntries.length - 1].id}')" class="px-2.5 py-1.5 rounded-lg bg-slate-700 text-white text-xs font-extrabold cursor-pointer">Receipt</button>` : `<span class="text-xs theme-text-faint">—</span>`);
             return `<div class="p-4 surface-row grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:items-center">
-              <div class="lg:col-span-3"><div class="font-extrabold text-sm">${escapeHTML(r.name)} ${r.isMultiDate ? `<span class="chip chip-blue">${r.tranches.length} dates</span>` : ''}</div><div class="text-xs theme-text-faint">${escapeHTML(r.upiId)}</div><div class="mt-1 flex flex-wrap gap-1">${r.tranches.map(t => { const pd = r.matchedEntries.filter(u => u.allocatedTargetId === t.id).reduce((a, u) => a + (Number(u.amount) || 0), 0); return `<span class="chip ${pd >= (Number(t.targetAmount) || 0) ? 'chip-emerald' : 'chip-slate'} num">🎯 ${formatShortDate(t.date)} • ${formatINR(t.targetAmount)}${r.isMultiDate ? ` • paid ${formatINR(pd)}` : ''}</span>`; }).join('')}</div></div>
+              <div class="lg:col-span-3"><div class="font-extrabold text-sm">${escapeHTML(r.name)} ${r.isMultiDate ? `<span class="chip chip-blue">${r.tranches.length} dates</span>` : ''}</div><div class="text-xs theme-text-faint">${escapeHTML(r.upiId)}</div><div class="mt-1 flex flex-wrap gap-1">${fifoAllocate(r.tranches, r.matchedEntries).map(sl => `<span class="chip ${sl.paid >= sl.target ? 'chip-emerald' : (sl.paid > 0 ? 'chip-amber' : 'chip-slate')} num">🎯 ${formatShortDate(sl.t.date)} • ${formatINR(sl.target)}${r.isMultiDate ? ` • paid ${formatINR(sl.paid)}` : ''}</span>`).join('')}</div></div>
               <div class="lg:col-span-2 lg:text-right font-extrabold num">${formatINR(r.targetAmount)}</div>
               <div class="lg:col-span-2 lg:text-right font-extrabold text-blue-600 num">${formatINR(r.paid)}</div>
               <div class="lg:col-span-2 lg:text-right text-xs font-extrabold num">${r.diff < 0 ? '<span class="chip chip-rose">' + formatINR(Math.abs(r.diff)) + ' Pending</span>' : (r.diff > 0 ? '<span class="chip chip-amber">+' + formatINR(r.diff) + ' Extra</span>' : '<span class="chip chip-emerald">✓ Fully Paid</span>')}</div>
@@ -3065,41 +3065,80 @@ function saveProofToDrive(partyName, fileName, base64Data) {
     }
 
     // Groups OPEN UPI payments by target payee: each party gets its own mini-ledger + its screenshots
+    // FIFO: a payee's payments first fill the OLDEST target date; whatever is left over moves to the next target date.
+    // Returns one slot per target date (date order) with the payment parts that fall in it.
+    function fifoAllocate(tranches, payments) {
+      const slots = [...tranches].sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.id).localeCompare(String(b.id)))
+        .map(t => ({ t, target: Number(t.targetAmount) || 0, items: [], paid: 0 }));
+      if (!slots.length) return slots;
+      const parts = new Map();
+      let k = 0;
+      [...payments].sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.id).localeCompare(String(b.id))).forEach(u => {
+        const total = Number(u.amount) || 0;
+        let left = total;
+        if (total <= 0) { slots[k].items.push({ u, part: 0, total }); return; }
+        while (left > 0.0001) {
+          while (k < slots.length - 1 && slots[k].paid >= slots[k].target - 0.0001) k++;
+          const slot = slots[k];
+          const take = k === slots.length - 1 ? left : Math.min(left, slot.target - slot.paid);
+          slot.items.push({ u, part: take, total });
+          slot.paid += take;
+          left -= take;
+          if (!parts.has(u.id)) parts.set(u.id, []);
+          parts.get(u.id).push({ date: slot.t.date, part: take });
+        }
+      });
+      // explain split payments
+      slots.forEach(sl => sl.items.forEach(it => {
+        const p = parts.get(it.u.id) || [];
+        if (p.length > 1) {
+          const idx = p.findIndex(x => x.date === sl.t.date && Math.abs(x.part - it.part) < 0.001);
+          it.note = idx === 0
+            ? `Split payment of ${formatINR(it.total)}: ${formatINR(it.part)} here, ${formatINR(it.total - it.part)} carried to ${p.slice(1).map(x => formatShortDate(x.date)).join(', ')} target`
+            : `Balance of ${formatINR(it.total)} payment brought forward from ${formatShortDate(p[0].date)} target`;
+          it.carried = idx > 0;
+        }
+      }));
+      return slots;
+    }
+
     function partyWiseLedgerHtml(party, entries, range) {
       const recon = computeTargetReconciliation(party, range);
       const proofIdx = new Map((window.__stmtProofs || []).map(p => [p.uid, p]));
       const used = new Set();
       const groups = [];
       recon.forEach(r => {
-        r.tranches.forEach((t, ti) => {
-          const list = entries.filter(u => u.allocatedTargetId === t.id);
-          list.forEach(u => used.add(u.id));
+        const ids = new Set(r.tranches.map(t => t.id));
+        const pays = entries.filter(u => ids.has(u.allocatedTargetId));
+        pays.forEach(u => used.add(u.id));
+        fifoAllocate(r.tranches, pays).forEach((sl, ti, all) => {
           // with a period filter, skip target dates that are outside the period and have no payment in it
-          if (range && !list.length && !inRange(t.date, range.from, range.to)) return;
+          if (range && !sl.items.length && !inRange(sl.t.date, range.from, range.to)) return;
           groups.push({
-            name: realName(r.name) || r.name || 'Payee', upi: r.upiId, target: Number(t.targetAmount) || 0, list,
-            tDate: t.date, tNote: t.note || '', tNo: ti + 1, tCount: r.tranches.length,
-            payeeTotalTarget: r.targetAmount, payeeTotalPaid: r.paid
+            name: realName(r.name) || r.name || 'Payee', upi: r.upiId, target: sl.target, items: sl.items,
+            tDate: sl.t.date, tNote: sl.t.note || '', tNo: ti + 1, tCount: all.length,
+            payeeTotalTarget: r.targetAmount, payeeTotalPaid: pays.reduce((a, u) => a + (Number(u.amount) || 0), 0)
           });
         });
       });
       groups.sort((a, b) => String(a.tDate).localeCompare(String(b.tDate)) || a.name.localeCompare(b.name));
       const rest = entries.filter(u => !used.has(u.id));
-      if (rest.length) groups.push({ name: 'Unassigned / Direct payments', upi: '', target: null, list: rest });
+      if (rest.length) groups.push({ name: 'Unassigned / Direct payments', upi: '', target: null, items: rest.map(u => ({ u, part: Number(u.amount) || 0, total: Number(u.amount) || 0 })) });
       const palette = ['#4f46e5', '#0891b2', '#7c3aed', '#059669', '#db2777', '#d97706', '#2563eb', '#0d9488'];
       const TD = 'border:1px solid #e2e8f0;padding:6px 8px;vertical-align:top;';
       return `<div style="margin-top:22px;"><h2 style="font-size:16px;font-weight:800;margin:0 0 10px 0;">Party-wise ledger with screenshots</h2>` + groups.map((g, gi) => {
         const color = palette[gi % palette.length];
-        const paid = g.list.reduce((s, u) => s + (Number(u.amount) || 0), 0);
+        const paid = g.items.reduce((s, it) => s + (Number(it.part) || 0), 0);
         const bal = g.target === null ? null : paid - g.target;
         const balTxt = bal === null ? '' : (bal < 0 ? `<span style="color:#e11d48;">${formatINR(Math.abs(bal))} pending</span>` : bal > 0 ? `<span style="color:#d97706;">+${formatINR(bal)} extra</span>` : `<span style="color:#059669;">Fully paid ✓</span>`);
-        const sorted = [...g.list].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+        const sorted = g.items;
         const photos = [];
-        const rows = sorted.map((u, i) => {
+        const rows = sorted.map((it, i) => {
+          const u = it.u;
           let proof = '<span style="color:#94a3b8;">—</span>';
           const p = proofIdx.get(u.id);
-          if (p) { photos.push(p); proof = `<a href="#stmt-proof-${p.idx}" onclick="return window.openStmtProof ? window.openStmtProof(${p.idx}) : true" style="display:inline-block;padding:2px 8px;border-radius:6px;background:${color};color:#fff;font-size:10px;font-weight:700;text-decoration:none;">Proof</a>`; }
-          return `<tr><td style="${TD}">${i + 1}</td><td style="${TD}white-space:nowrap;">${escapeHTML(formatShortDate(u.date))}</td><td style="${TD}"><strong>${escapeHTML(payeeNameOf(u, party))}</strong>${u.payeeUpi && !/^(na|n\/a|nil|-)$/i.test(String(u.payeeUpi).trim()) ? '<br><span style="font-size:10px;color:#64748b;">' + escapeHTML(u.payeeUpi) + '</span>' : ''}</td><td style="${TD}">${escapeHTML(u.utr || '—')}<br><span style="font-size:10px;color:#64748b;">${escapeHTML(u.appMode || '')}</span></td><td style="${TD}text-align:right;font-weight:800;white-space:nowrap;">${formatINR(u.amount)}</td><td style="${TD}text-align:center;">${proof}</td></tr>`;
+          if (p) { if (!it.carried) photos.push(p); proof = `<a href="#stmt-proof-${p.idx}" onclick="return window.openStmtProof ? window.openStmtProof(${p.idx}) : true" style="display:inline-block;padding:2px 8px;border-radius:6px;background:${color};color:#fff;font-size:10px;font-weight:700;text-decoration:none;">Proof</a>`; }
+          return `<tr><td style="${TD}">${i + 1}</td><td style="${TD}white-space:nowrap;">${escapeHTML(formatShortDate(u.date))}</td><td style="${TD}"><strong>${escapeHTML(payeeNameOf(u, party))}</strong>${u.payeeUpi && !/^(na|n\/a|nil|-)$/i.test(String(u.payeeUpi).trim()) ? '<br><span style="font-size:10px;color:#64748b;">' + escapeHTML(u.payeeUpi) + '</span>' : ''}</td><td style="${TD}">${escapeHTML(u.utr || '—')}<br><span style="font-size:10px;color:#64748b;">${escapeHTML(u.appMode || '')}</span></td><td style="${TD}text-align:right;font-weight:800;white-space:nowrap;">${formatINR(it.part)}${it.note ? `<div style="font-size:9.5px;font-weight:700;color:${it.carried ? '#7c3aed' : '#b45309'};white-space:normal;line-height:1.3;margin-top:2px;">${it.carried ? '↪ ' : '↘ '}${escapeHTML(it.note)}</div>` : ''}</td><td style="${TD}text-align:center;">${proof}</td></tr>`;
         }).join('');
         return `<div data-pdf-keep="1" style="border:2px solid ${color}33;border-radius:14px;overflow:hidden;margin-bottom:16px;page-break-inside:auto;">
           <div data-pdf-keepnext="1" style="background:${color};color:#ffffff;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -3156,11 +3195,14 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       const openForProofs = [...(party.upiHisab || []).filter(u => u.status === 'OPEN' && (!range || inRange(u.date, range.from, range.to)))].sort((a, b) => String(a.date).localeCompare(String(b.date)));
       // every target date is its own line, in date order
       const trancheRows = [];
-      recon.forEach(r => r.tranches.forEach((t, ti) => {
-        const paidT = openForProofs.filter(u => u.allocatedTargetId === t.id).reduce((s2, u) => s2 + (Number(u.amount) || 0), 0);
-        if (range && !paidT && !inRange(t.date, range.from, range.to)) return;
-        trancheRows.push({ date: t.date, name: realName(r.name) || r.name || 'Payee', upiId: r.upiId, target: Number(t.targetAmount) || 0, paid: paidT, diff: paidT - (Number(t.targetAmount) || 0), no: ti + 1, count: r.tranches.length });
-      }));
+      recon.forEach(r => {
+        const ids = new Set(r.tranches.map(t => t.id));
+        const pays = openForProofs.filter(u => ids.has(u.allocatedTargetId));
+        fifoAllocate(r.tranches, pays).forEach((sl, ti, all) => {
+          if (range && !sl.items.length && !inRange(sl.t.date, range.from, range.to)) return;
+          trancheRows.push({ date: sl.t.date, name: realName(r.name) || r.name || 'Payee', upiId: r.upiId, target: sl.target, paid: sl.paid, diff: sl.paid - sl.target, no: ti + 1, count: all.length });
+        });
+      });
       trancheRows.sort((a, b) => String(a.date).localeCompare(String(b.date)) || a.name.localeCompare(b.name));
       const multiPayees = recon.filter(r => r.tranches.length > 1);
       window.__stmtProofs = [];
