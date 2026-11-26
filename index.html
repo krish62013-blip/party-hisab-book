@@ -513,6 +513,9 @@
           </div>
 
           <div class="px-4 py-3 border-b theme-border flex flex-wrap items-end gap-2.5" style="background:linear-gradient(90deg, rgba(168,85,247,0.07), rgba(59,130,246,0.05));">
+            <div class="w-full relative">
+              <input type="search" id="reconSearchInput" oninput="window.setReconSearch(this.value)" placeholder="🔍 Search party / payee name, UPI or UTR…" class="w-full pl-3 pr-3 py-2.5 rounded-xl border-2 border-purple-300 text-sm font-semibold focus:outline-none focus:border-purple-500">
+            </div>
             <div class="text-xs font-extrabold text-purple-600 w-full sm:w-auto sm:mr-1">📅 Filter by period</div>
             <div><label class="block text-[10px] font-extrabold theme-text-faint mb-0.5">From</label><input type="date" id="reconFromDate" onchange="window.applyReconDateFilter()" class="px-2.5 py-1.5 rounded-xl border text-xs font-semibold"></div>
             <div><label class="block text-[10px] font-extrabold theme-text-faint mb-0.5">To</label><input type="date" id="reconToDate" onchange="window.applyReconDateFilter()" class="px-2.5 py-1.5 rounded-xl border text-xs font-semibold"></div>
@@ -1274,6 +1277,8 @@ function saveProofToDrive(partyName, fileName, base64Data) {
     let activeTab = 'UPI';
     let upiStatusFilter = 'OPEN';
     let payeeStatusFilter = 'ALL';
+    let reconSearch = '', showAllRecon = false;
+    const RECON_INITIAL_COUNT = 6;
     let showAllUpiPayouts = false;
     const UPI_INITIAL_VISIBLE_COUNT = 5;
     let currentProofPayload = null;
@@ -2023,25 +2028,49 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         const pageHpx = Math.floor(pageHpt / ratio);
 
         const rootTop = root.getBoundingClientRect().top;
+        const rel = el => { const r = el.getBoundingClientRect(); return [r.top - rootTop, r.bottom - rootTop]; };
         const atoms = [];
         [...root.children].forEach(c => collectAtoms(c, atoms));
         const totalH = root.scrollHeight;
         const edges = atoms.map(x => [x[0] - rootTop, x[1] - rootTop]);
+        // blocks that should stay on one page (whole tables, each party's ledger)
+        const keeps = [...root.querySelectorAll('table, [data-pdf-keep]')].map(rel);
+        // never end a page right after a heading / party title
+        // (from the bottom of the title down to the top of whatever follows it)
+        const noBreak = [];
+        root.querySelectorAll('h1, h2, h3, [data-pdf-keepnext]').forEach(el => {
+          const b = rel(el)[1];
+          const next = edges.filter(([t]) => t >= b - 1).reduce((m, [t]) => Math.min(m, t), Infinity);
+          noBreak.push([b - 3, (isFinite(next) ? next : b) + 3]);
+        });
+        // tables whose header row is repeated when they continue on the next page
+        const tables = [...root.querySelectorAll('table')].filter(t => t.tHead).map(t => { const [top, bottom] = rel(t); return { top, bottom, hb: rel(t.tHead)[1] }; });
 
-        // page breaks only where no row / card / block would be cut
         const cutsAtom = p => edges.some(([t, b]) => t < p - 2 && b > p + 2);
-        const candidates = [...new Set(edges.map(e => Math.round(e[1])))].sort((x, y) => x - y);
+        const okBreak = p => !cutsAtom(p) && !noBreak.some(([a, b]) => p >= a && p <= b);
+        const candidates = [...new Set(edges.map(e => Math.round(e[1])).concat(keeps.map(k => Math.round(k[0]))))].sort((x, y) => x - y);
         const slices = [];
         let start = 0;
         while (start < totalH - 2) {
-          let end = start + pageHpx;
+          const tbl = tables.find(t => start > t.hb + 1 && start < t.bottom - 2);
+          const hdrH = tbl ? Math.max(0, tbl.hb - tbl.top) : 0;
+          const room = pageHpx - hdrH;
+          let end = start + room;
           if (end >= totalH) end = totalH;
           else {
+            // a table / party ledger that does not fit in the rest of this page (but fits on a full page) moves to the next page
+            const mover = keeps
+              .filter(([t, b]) => t > start + room * 0.12 && t < end && b > end && (b - t) <= pageHpx - 4)
+              .sort((x, y) => x[0] - y[0])[0];
             let best = 0;
-            for (const p of candidates) { if (p > start + 60 && p <= end && !cutsAtom(p)) best = p; }
+            if (mover) {
+              for (const p of candidates) { if (p > start + 60 && p <= mover[0] + 1 && okBreak(p)) best = p; }
+            }
+            if (!best) for (const p of candidates) { if (p > start + 60 && p <= end && okBreak(p)) best = p; }
+            if (!best) for (const p of candidates) { if (p > start + 60 && p <= end && !cutsAtom(p)) best = p; }
             if (best) end = best;
           }
-          slices.push([start, end]);
+          slices.push([start, end, tbl ? { y0: tbl.top, y1: tbl.hb } : null]);
           start = end;
         }
 
@@ -2057,6 +2086,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         });
 
         let pageNo = 0;
+        const hdrCache = {};
         for (const ch of chunks) {
           setStatus(`Page ${pageNo + 1}–${pageNo + ch.pages.length} of ${slices.length}…`);
           const canvas = await window.html2canvas(root, {
@@ -2064,15 +2094,26 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             x: 0, y: ch.y0 + rootTop, width: PDF_W, height: Math.max(1, ch.y1 - ch.y0),
             windowWidth: PDF_W, windowHeight: Math.max(1200, ch.y1 + rootTop + 50), scrollX: 0, scrollY: 0
           });
-          for (const [y0, y1] of ch.pages) {
+          for (const [y0, y1, hdr] of ch.pages) {
+            if (pageNo > 0) pdf.addPage();
+            let topPt = 0;
+            if (hdr) {
+              // repeat the table's column titles at the top of a continued page
+              const key = hdr.y0 + ':' + hdr.y1;
+              if (!hdrCache[key]) {
+                const hc = await window.html2canvas(root, { scale, useCORS: true, backgroundColor: '#ffffff', logging: false, x: 0, y: hdr.y0 + rootTop, width: PDF_W, height: Math.max(1, hdr.y1 - hdr.y0), windowWidth: PDF_W, windowHeight: Math.max(1200, hdr.y1 + rootTop + 50), scrollX: 0, scrollY: 0 });
+                hdrCache[key] = hc.toDataURL('image/jpeg', 0.9);
+              }
+              pdf.addImage(hdrCache[key], 'JPEG', 0, 0, pageWpt, (hdr.y1 - hdr.y0) * ratio, undefined, 'FAST');
+              topPt = (hdr.y1 - hdr.y0) * ratio;
+            }
             const part = document.createElement('canvas');
             part.width = canvas.width;
             part.height = Math.max(1, Math.round((y1 - y0) * scale));
             const ctx = part.getContext('2d');
             ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, part.width, part.height);
             ctx.drawImage(canvas, 0, Math.round((y0 - ch.y0) * scale), canvas.width, part.height, 0, 0, part.width, part.height);
-            if (pageNo > 0) pdf.addPage();
-            pdf.addImage(part.toDataURL('image/jpeg', 0.85), 'JPEG', 0, 0, pageWpt, (y1 - y0) * ratio, undefined, 'FAST');
+            pdf.addImage(part.toDataURL('image/jpeg', 0.85), 'JPEG', 0, topPt, pageWpt, (y1 - y0) * ratio, undefined, 'FAST');
             pageNo++;
           }
         }
@@ -2462,7 +2503,13 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       const party = getActiveParty();
       const range = reconRange();
       const allRecon = computeTargetReconciliation(party, range);
-      const filtered = allRecon.filter(r => payeeStatusFilter === 'ALL' || r.status === payeeStatusFilter);
+      const q = reconSearch.trim().toLowerCase();
+      const lastActivity = r => [...r.tranches.map(t => String(t.date || '')), ...r.matchedEntries.map(u => String(u.date || ''))].sort().pop() || '';
+      const filtered = allRecon
+        .filter(r => payeeStatusFilter === 'ALL' || r.status === payeeStatusFilter)
+        .filter(r => !q || [r.name, realName(r.name), r.upiId, ...r.matchedEntries.map(u => (u.payeeName || '') + ' ' + (u.payeeUpi || '') + ' ' + (u.utr || ''))].join(' ').toLowerCase().includes(q))
+        .sort((a, b) => lastActivity(b).localeCompare(lastActivity(a)));   // latest first
+      const visibleRecon = (showAllRecon || q) ? filtered : filtered.slice(0, RECON_INITIAL_COUNT);
       const pl = document.getElementById('reconPeriodLabel');
       if (pl) pl.innerHTML = range ? `<span class="chip chip-purple">📅 Period: ${periodLabel(range)} • ${allRecon.length} payees</span>` : '<span class="section-help">Showing all open targets (no date filter)</span>';
       const fb = document.getElementById('btnReconFinalize');
@@ -2472,7 +2519,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
 
       document.getElementById('payeeReconList').innerHTML = filtered.length === 0
         ? `<div class="p-8 text-center text-xs font-bold theme-text-faint">No target payees in this view.</div>`
-        : filtered.map(r => {
+        : visibleRecon.map(r => {
             const realPhotoEntries = r.matchedEntries.filter(u => u.proofImg && !String(u.proofImg).startsWith('data:image/svg+xml'));
             const proofBtn = realPhotoEntries.length > 0
               ? proofThumbsHtml(r.matchedEntries, 'openUpiProof', '')
@@ -2487,8 +2534,17 @@ function saveProofToDrive(partyName, fileName, base64Data) {
             </div>`;
           }).join('');
 
-      document.getElementById('payeeReconFooter').innerHTML = `<span>${range ? 'Period ' : ''}Total Target: <strong class="num">${formatINR(totTarget)}</strong> • Paid: <strong class="text-blue-600 num">${formatINR(totPaid)}</strong> • Balance: <strong class="num ${totPaid - totTarget < 0 ? 'text-rose-600' : 'text-emerald-600'}">${formatINR(totPaid - totTarget)}</strong></span>`;
+      const moreRecon = (!q && filtered.length > RECON_INITIAL_COUNT)
+        ? `<button type="button" onclick="window.toggleShowAllRecon()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-extrabold cursor-pointer shadow">${showAllRecon ? '▲ Show less' : `▼ Show all ${filtered.length} payees`}</button>` : '';
+      document.getElementById('payeeReconFooter').innerHTML = `<span>Showing ${visibleRecon.length} of ${filtered.length} payees${q ? ' (search)' : ''}</span>${moreRecon}<span>${range ? 'Period ' : ''}Total Target: <strong class="num">${formatINR(totTarget)}</strong> • Paid: <strong class="text-blue-600 num">${formatINR(totPaid)}</strong> • Balance: <strong class="num ${totPaid - totTarget < 0 ? 'text-rose-600' : 'text-emerald-600'}">${formatINR(totPaid - totTarget)}</strong></span>`;
     }
+
+    window.toggleShowAllRecon = function () {
+      showAllRecon = !showAllRecon;
+      renderPayeeReconciliation();
+      if (!showAllRecon) { const el = document.getElementById('cardTargetRecon'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    };
+    window.setReconSearch = function (v) { reconSearch = v || ''; renderPayeeReconciliation(); };
 
     window.applyReconDateFilter = function () {
       reconFrom = document.getElementById('reconFromDate').value || '';
@@ -2934,7 +2990,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
 
     function pdfProofGrid(list, title) {
       if (!list.length) return '';
-      return `<div style="margin-top:14px;">${title ? `<div style="font-size:12px;font-weight:800;color:#047857;margin-bottom:8px;">${escapeHTML(title)}</div>` : ''}<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">${list.map(p => pdfProofCard(p, p.idx)).join('')}</div></div>`;
+      return `<div style="margin-top:14px;">${title ? `<div data-pdf-keepnext="1" style="font-size:12px;font-weight:800;color:#047857;margin-bottom:8px;">${escapeHTML(title)}</div>` : ''}<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">${list.map(p => pdfProofCard(p, p.idx)).join('')}</div></div>`;
     }
 
     function stmtProofCell(u, name) {
@@ -3033,14 +3089,14 @@ function saveProofToDrive(partyName, fileName, base64Data) {
           if (p) { photos.push(p); proof = `<a href="#stmt-proof-${p.idx}" onclick="return window.openStmtProof ? window.openStmtProof(${p.idx}) : true" style="display:inline-block;padding:2px 8px;border-radius:6px;background:${color};color:#fff;font-size:10px;font-weight:700;text-decoration:none;">Proof</a>`; }
           return `<tr><td style="${TD}">${i + 1}</td><td style="${TD}white-space:nowrap;">${escapeHTML(formatShortDate(u.date))}</td><td style="${TD}"><strong>${escapeHTML(payeeNameOf(u, party))}</strong>${u.payeeUpi && !/^(na|n\/a|nil|-)$/i.test(String(u.payeeUpi).trim()) ? '<br><span style="font-size:10px;color:#64748b;">' + escapeHTML(u.payeeUpi) + '</span>' : ''}</td><td style="${TD}">${escapeHTML(u.utr || '—')}<br><span style="font-size:10px;color:#64748b;">${escapeHTML(u.appMode || '')}</span></td><td style="${TD}text-align:right;font-weight:800;white-space:nowrap;">${formatINR(u.amount)}</td><td style="${TD}text-align:center;">${proof}</td></tr>`;
         }).join('');
-        return `<div style="border:2px solid ${color}33;border-radius:14px;overflow:hidden;margin-bottom:16px;page-break-inside:auto;">
-          <div style="background:${color};color:#ffffff;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+        return `<div data-pdf-keep="1" style="border:2px solid ${color}33;border-radius:14px;overflow:hidden;margin-bottom:16px;page-break-inside:auto;">
+          <div data-pdf-keepnext="1" style="background:${color};color:#ffffff;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
             <div><div style="font-size:14px;font-weight:800;">${gi + 1}. ${escapeHTML(g.name)}</div>${g.upi ? `<div style="font-size:11px;opacity:0.85;">${escapeHTML(g.upi)}</div>` : ''}</div>
             <div style="font-size:11px;font-weight:700;text-align:right;">${g.target !== null ? 'Target: ' + formatINR(g.target) + ' • ' : ''}Paid: ${formatINR(paid)}</div>
           </div>
           <div style="padding:10px 12px;">
-            ${g.tranches && g.tranches.length ? `<div style="font-size:11px;margin-bottom:6px;"><strong>Target given on ${g.tranches.length} date${g.tranches.length > 1 ? 's' : ''}:</strong> ${g.tranches.map(t => `<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 8px;border-radius:999px;background:${color}14;border:1px solid ${color}55;font-weight:700;">${escapeHTML(formatShortDate(t.date))} — ${formatINR(t.targetAmount)}${t.note ? ' (' + escapeHTML(t.note) + ')' : ''}</span>`).join('')}</div>` : ''}
-            ${balTxt ? `<div style="font-size:12px;font-weight:800;margin-bottom:8px;">Balance: ${balTxt}</div>` : ''}
+            ${g.tranches && g.tranches.length ? `<div data-pdf-keepnext="1" style="font-size:11px;margin-bottom:6px;"><strong>Target given on ${g.tranches.length} date${g.tranches.length > 1 ? 's' : ''}:</strong> ${g.tranches.map(t => `<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 8px;border-radius:999px;background:${color}14;border:1px solid ${color}55;font-weight:700;">${escapeHTML(formatShortDate(t.date))} — ${formatINR(t.targetAmount)}${t.note ? ' (' + escapeHTML(t.note) + ')' : ''}</span>`).join('')}</div>` : ''}
+            ${balTxt ? `<div data-pdf-keepnext="1" style="font-size:12px;font-weight:800;margin-bottom:8px;">Balance: ${balTxt}</div>` : ''}
             ${sorted.length ? `<div class="stmt-scroll"><table class="stmt-table" style="width:100%;min-width:560px;border-collapse:collapse;font-size:11px;table-layout:fixed;">
               <colgroup><col style="width:5%"><col style="width:13%"><col style="width:32%"><col style="width:22%"><col style="width:16%"><col style="width:12%"></colgroup>
               <thead><tr style="background:${color}14;"><th style="${TD}text-align:left;">#</th><th style="${TD}text-align:left;">Date</th><th style="${TD}text-align:left;">Paid To</th><th style="${TD}text-align:left;">UTR / App</th><th style="${TD}text-align:right;">Amount</th><th style="${TD}">Proof</th></tr></thead>
