@@ -123,6 +123,17 @@
         var(--bg-app);
       background-attachment: fixed;
     }
+    .row-menu-btn { width: 36px; height: 34px; border-radius: 10px; border: 1px solid rgba(147,51,234,0.35); background: rgba(147,51,234,0.08); color: #7e22ce; font-size: 20px; font-weight: 900; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+    .row-menu-btn:hover { background: rgba(147,51,234,0.18); }
+    html.dark-mode .row-menu-btn { color: #d8b4fe; }
+    .row-menu { position: fixed; z-index: 9999; min-width: 210px; padding: 6px; border-radius: 14px; background: #ffffff; border: 1px solid #e2e8f0; box-shadow: 0 14px 36px rgba(15,23,42,0.22); animation: rowMenuIn .12s ease-out; }
+    html.dark-mode .row-menu { background: #1e293b; border-color: #334155; }
+    .row-menu button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: 0; background: transparent; border-radius: 10px; font-size: 13px; font-weight: 800; color: #0f172a; text-align: left; cursor: pointer; }
+    html.dark-mode .row-menu button { color: #e2e8f0; }
+    .row-menu button:hover { background: rgba(147,51,234,0.10); }
+    .row-menu .row-menu-danger { color: #e11d48; }
+    html.dark-mode .row-menu .row-menu-danger { color: #fda4af; }
+    @keyframes rowMenuIn { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: none; } }
     .section-help { font-size: 11px; font-weight: 600; color: var(--text-faint); margin-top: 2px; }
     .chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 800; line-height: 1.5; white-space: nowrap; border: 1px solid transparent; }
     .chip-emerald { background: rgba(16,185,129,0.14); color: #047857; border-color: rgba(16,185,129,0.35); }
@@ -1837,6 +1848,8 @@ function saveProofToDrive(partyName, fileName, base64Data) {
     }
 
     window.openModal = function (id) {
+      if (id === 'pdfModal' && !window.__pdfHintFresh) window.__pdfNameHint = null;
+      window.__pdfHintFresh = false;
       const el = document.getElementById(id);
       if (el) el.classList.remove('hidden');
       if (id === 'pdfModal') setTimeout(() => window.downloadPdfDirect(), 150);
@@ -1935,6 +1948,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       else if (kind.includes('batch')) label = 'Batch';
       else if (kind.includes('main')) label = 'Main_Statement';
       else if (kind.includes('payee')) label = 'Payee_Report';
+      if (window.__pdfNameHint) { label = window.__pdfNameHint.replace(/[^a-zA-Z0-9]+/g, '_'); }
       return `${(party ? party.name : 'Hisab').replace(/[^a-zA-Z0-9]+/g, '_')}_${label}_${new Date().toISOString().slice(0, 10)}.pdf`;
     }
 
@@ -2543,7 +2557,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
               <div class="lg:col-span-2 lg:text-right font-extrabold text-blue-600 num">${formatINR(r.paid)}</div>
               <div class="lg:col-span-2 lg:text-right text-xs font-extrabold num">${r.diff < 0 ? '<span class="chip chip-rose">' + formatINR(Math.abs(r.diff)) + ' Pending</span>' : (r.diff > 0 ? '<span class="chip chip-amber">+' + formatINR(r.diff) + ' Extra</span>' : '<span class="chip chip-emerald">✓ Fully Paid</span>')}</div>
               <div class="lg:col-span-1 lg:text-center">${proofBtn}</div>
-              <div class="lg:col-span-2 flex justify-end gap-1.5 flex-wrap"><button type="button" onclick="window.openEditTargetModal('${r.id}')" class="px-2.5 py-1.5 rounded-lg border theme-border text-xs font-extrabold cursor-pointer">Edit</button><button type="button" onclick="window.deleteTargetEntry('${r.id}')" title="Delete this target" class="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold cursor-pointer">🗑 Delete</button></div>
+              <div class="lg:col-span-2 flex justify-end"><button type="button" onclick="window.openTargetRowMenu(event, '${r.id}')" title="More options" aria-label="More options" class="row-menu-btn">⋮</button></div>
             </div>`;
           }).join('');
 
@@ -2551,6 +2565,40 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         ? `<button type="button" onclick="window.toggleShowAllRecon()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-extrabold cursor-pointer shadow">${showAllRecon ? '▲ Show less' : `▼ Show all ${filtered.length} payees`}</button>` : '';
       document.getElementById('payeeReconFooter').innerHTML = `<span>Showing ${visibleRecon.length} of ${filtered.length} payees${q ? ' (search)' : ''}</span>${moreRecon}<span>${range ? 'Period ' : ''}Total Target: <strong class="num">${formatINR(totTarget)}</strong> • Paid: <strong class="text-blue-600 num">${formatINR(totPaid)}</strong> • Balance: <strong class="num ${totPaid - totTarget < 0 ? 'text-rose-600' : 'text-emerald-600'}">${formatINR(totPaid - totTarget)}</strong></span>`;
     }
+
+    // ⋮ menu on a target payee row: PDF / Edit / Delete
+    window.openTargetRowMenu = function (ev, targetId) {
+      if (ev) ev.stopPropagation();
+      window.closeRowMenu();
+      const btn = ev && ev.currentTarget;
+      const menu = document.createElement('div');
+      menu.id = 'rowMenuPopup';
+      menu.className = 'row-menu';
+      menu.innerHTML = `
+        <button type="button" data-act="pdf">📄 <span>View / Download PDF</span></button>
+        <button type="button" data-act="edit">✏️ <span>Edit target</span></button>
+        <button type="button" data-act="del" class="row-menu-danger">🗑 <span>Delete target</span></button>`;
+      menu.addEventListener('click', e => {
+        const b = e.target.closest('button');
+        if (!b) return;
+        window.closeRowMenu();
+        if (b.dataset.act === 'pdf') window.generateCombinedTargetLedgerPDF(targetId);
+        else if (b.dataset.act === 'edit') window.openEditTargetModal(targetId);
+        else if (b.dataset.act === 'del') window.deleteTargetEntry(targetId);
+      });
+      document.body.appendChild(menu);
+      const r = btn ? btn.getBoundingClientRect() : { right: window.innerWidth - 10, bottom: 100, top: 100 };
+      const mw = menu.offsetWidth, mh = menu.offsetHeight;
+      let left = Math.min(window.innerWidth - mw - 8, Math.max(8, r.right - mw));
+      let top = r.bottom + 6;
+      if (top + mh > window.innerHeight - 8) top = Math.max(8, r.top - mh - 6);
+      menu.style.left = left + 'px';
+      menu.style.top = top + 'px';
+      setTimeout(() => document.addEventListener('click', window.closeRowMenu, { once: true }), 0);
+    };
+    window.closeRowMenu = function () { const m = document.getElementById('rowMenuPopup'); if (m) m.remove(); };
+    window.addEventListener('scroll', () => window.closeRowMenu(), { passive: true });
+    window.addEventListener('resize', () => window.closeRowMenu());
 
     window.toggleShowAllRecon = function () {
       showAllRecon = !showAllRecon;
@@ -3132,8 +3180,9 @@ function saveProofToDrive(partyName, fileName, base64Data) {
     }
 
     // mode 'payments': show the target dates that the listed payments fall against (Current UPI Ledger)
-    function partyWiseLedgerHtml(party, entries, range, mode) {
-      const recon = computeTargetReconciliation(party, mode === 'payments' ? null : range);
+    function partyWiseLedgerHtml(party, entries, range, mode, onlyTargetId) {
+      let recon = computeTargetReconciliation(party, mode === 'payments' ? null : range);
+      if (onlyTargetId) recon = recon.filter(r => (r.allTranches || r.tranches).some(t => t.id === onlyTargetId));
       const listed = new Set(entries.map(u => u.id));
       const proofIdx = new Map((window.__stmtProofs || []).map(p => [p.uid, p]));
       const used = new Set();
@@ -3154,7 +3203,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       groups.sort((a, b) => String(a.tDate).localeCompare(String(b.tDate)) || a.name.localeCompare(b.name));
       const inAnyGroup = new Set();
       recon.forEach(r => r.allSlots.forEach(sl => sl.items.forEach(it => inAnyGroup.add(it.u.id))));
-      const rest = entries.filter(u => !used.has(u.id) && !inAnyGroup.has(u.id));
+      const rest = onlyTargetId ? [] : entries.filter(u => !used.has(u.id) && !inAnyGroup.has(u.id));
       if (rest.length) groups.push({ name: 'Unassigned / Direct payments', upi: '', target: null, items: rest.map(u => ({ u, part: Number(u.amount) || 0, total: Number(u.amount) || 0 })) });
       const palette = ['#4f46e5', '#0891b2', '#7c3aed', '#059669', '#db2777', '#d97706', '#2563eb', '#0d9488'];
       const TD = 'border:1px solid #e2e8f0;padding:6px 8px;vertical-align:top;';
@@ -3216,10 +3265,18 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       window.openModal('pdfModal');
     };
 
-    window.generateCombinedTargetLedgerPDF = function () {
+    // onlyTargetId: make the ledger for ONE target payee (all of that payee's target dates)
+    window.generateCombinedTargetLedgerPDF = function (onlyTargetId) {
       const party = getActiveParty();
       const range = reconRange();
-      const recon = computeTargetReconciliation(party, range);
+      const single = typeof onlyTargetId === 'string' && onlyTargetId ? onlyTargetId : null;
+      let recon = computeTargetReconciliation(party, range);
+      if (single) {
+        recon = recon.filter(r => (r.allTranches || r.tranches).some(t => t.id === single));
+        if (!recon.length) { showToast(range ? 'This payee has no target in the selected period' : 'Payee not found'); return; }
+        window.__pdfNameHint = (realName(recon[0].name) || recon[0].name || 'Payee') + '_Ledger';
+        window.__pdfHintFresh = true;
+      }
       const totTarget = recon.reduce((s, r) => s + (Number(r.targetAmount) || 0), 0);
       const totPaid = recon.reduce((s, r) => s + (Number(r.paid) || 0), 0);
       const netDiff = totPaid - totTarget;
@@ -3229,7 +3286,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
       const anyGroup = new Set();
       computeTargetReconciliation(party).forEach(r => r.matchedEntries.forEach(u => anyGroup.add(u.id)));
       // payments counted against this period's target dates (any payment date) + unassigned payments paid in the period
-      const openForProofs = [...(party.upiHisab || []).filter(u => u.status === 'OPEN' && (inGroups.has(u.id) || (!anyGroup.has(u.id) && (!range || inRange(u.date, range.from, range.to)))))].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      const openForProofs = [...(party.upiHisab || []).filter(u => u.status === 'OPEN' && (inGroups.has(u.id) || (!single && !anyGroup.has(u.id) && (!range || inRange(u.date, range.from, range.to)))))].sort((a, b) => String(a.date).localeCompare(String(b.date)));
       // every target date is its own line, in date order
       const trancheRows = [];
       recon.forEach(r => {
@@ -3247,8 +3304,9 @@ function saveProofToDrive(partyName, fileName, base64Data) {
         <div style="color:#0f172a;">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:2px solid #0f172a;padding-bottom:14px;margin-bottom:16px;">
             <div>
-              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:#6d28d9;">Party Hisab Book • Combined Third-Party Target Ledger</div>
-              <h1 style="font-size:22px;font-weight:800;margin:4px 0 0 0;">${escapeHTML(party.name)}</h1>
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:#6d28d9;">Party Hisab Book • ${single ? 'Target Payee Ledger' : 'Combined Third-Party Target Ledger'}</div>
+              <h1 style="font-size:22px;font-weight:800;margin:4px 0 0 0;">${single ? escapeHTML(realName(recon[0].name) || recon[0].name) : escapeHTML(party.name)}</h1>
+              ${single ? `<div style="font-size:12px;color:#475569;font-weight:700;">${recon[0].upiId ? 'UPI / Mobile: ' + escapeHTML(recon[0].upiId) + ' • ' : ''}Party: ${escapeHTML(party.name)}</div>` : ''}
               ${range ? `<div style="display:inline-block;margin-top:6px;padding:3px 10px;border-radius:999px;background:#ede9fe;color:#5b21b6;font-size:11px;font-weight:800;">Period: ${escapeHTML(periodLabel(range))}</div>` : ''}
               <div style="font-size:12px;color:#475569;">${escapeHTML([party.contact, party.city].filter(Boolean).join(' • '))}</div>
             </div>
@@ -3270,7 +3328,7 @@ function saveProofToDrive(partyName, fileName, base64Data) {
           ${multiPayees.length ? `<div data-pdf-keepnext="1" style="font-size:12px;font-weight:800;color:#6d28d9;margin:14px 0 6px 0;">Payees with more than one target date — combined totals</div>
           <div class="stmt-scroll"><table class="stmt-table" style="width:100%;min-width:560px;border-collapse:collapse;font-size:11px;table-layout:fixed;"><thead><tr style="background:#f5f3ff;"><th style="border:1px solid #cbd5e1;padding:6px;text-align:left;">Payee</th><th style="border:1px solid #cbd5e1;padding:6px;text-align:left;">Target dates</th><th style="border:1px solid #cbd5e1;padding:6px;text-align:right;">Total Target</th><th style="border:1px solid #cbd5e1;padding:6px;text-align:right;">Total Paid</th><th style="border:1px solid #cbd5e1;padding:6px;text-align:right;">Balance</th></tr></thead>
             <tbody>${multiPayees.map(r => `<tr><td style="border:1px solid #cbd5e1;padding:6px;"><strong>${escapeHTML(realName(r.name) || r.name)}</strong></td><td style="border:1px solid #cbd5e1;padding:6px;">${r.tranches.map(t => escapeHTML(formatShortDate(t.date)) + ' — ' + formatINR(t.targetAmount)).join('<br>')}</td><td style="border:1px solid #cbd5e1;padding:6px;text-align:right;">${formatINR(r.targetAmount)}</td><td style="border:1px solid #cbd5e1;padding:6px;text-align:right;color:#1d4ed8;font-weight:800;">${formatINR(r.paid)}</td><td style="border:1px solid #cbd5e1;padding:6px;text-align:right;font-weight:800;color:${r.diff < 0 ? '#e11d48' : r.diff > 0 ? '#d97706' : '#059669'};">${r.diff < 0 ? formatINR(-r.diff) + ' pending' : r.diff > 0 ? '+' + formatINR(r.diff) + ' extra' : 'Exact ✓'}</td></tr>`).join('')}</tbody></table></div>` : ''}
-          ${partyWiseLedgerHtml(party, openForProofs, range)}
+          ${partyWiseLedgerHtml(party, openForProofs, range, null, single)}
         </div>`;
       window.openModal('pdfModal');
     };
